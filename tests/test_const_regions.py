@@ -87,3 +87,40 @@ def test_malformed_tokens_return_none() -> None:
     assert const.region_from_access_token("") is None
     assert const.region_from_access_token("not-a-jwt") is None
     assert const.region_from_access_token("a.!!!.c") is None  # bad base64/json
+
+
+# ---------------------------------------------------------------------------
+# OAuth endpoints
+# ---------------------------------------------------------------------------
+# Tesla's third-party token docs: "calls to /token must use the
+# fleet-auth.prd.vn.cloud.tesla.com domain as these calls can come from
+# application servers and require different rate limits", reinforced by the
+# 2025-07-21 announcement warning that auth.tesla.com token generation became
+# unreliable from August 2025. /authorize is browser-facing and stays put.
+#
+# The OpenID discovery document still advertises the old auth.tesla.com token
+# endpoint, so these are pinned to stop it being "corrected" back.
+_FLEET_AUTH_HOST = "https://fleet-auth.prd.vn.cloud.tesla.com"
+
+
+def test_token_exchange_uses_the_fleet_auth_host() -> None:
+    const = _load_isolated()
+    assert const.TESLA_USER_TOKEN_URL == f"{_FLEET_AUTH_HOST}/oauth2/v3/token"
+    # application_credentials hands HA the same endpoint for both grants.
+    assert const.OAUTH_TOKEN_URL == const.TESLA_USER_TOKEN_URL
+    # Partner (client_credentials) calls are server-to-server too.
+    assert const.TESLA_PARTNER_TOKEN_URL == f"{_FLEET_AUTH_HOST}/oauth2/v3/token"
+
+
+def test_authorize_stays_on_auth_tesla_com() -> None:
+    const = _load_isolated()
+    assert const.OAUTH_AUTHORIZE_URL == "https://auth.tesla.com/oauth2/v3/authorize"
+
+
+def test_no_token_endpoint_still_points_at_auth_tesla_com() -> None:
+    const = _load_isolated()
+    for name in ("TESLA_USER_TOKEN_URL", "OAUTH_TOKEN_URL", "TESLA_PARTNER_TOKEN_URL"):
+        url = getattr(const, name)
+        assert "auth.tesla.com/oauth2/v3/token" not in url, (
+            f"{name} uses the legacy token host: {url}"
+        )
