@@ -190,7 +190,7 @@ SIGNAL_CATEGORIES: dict[str, list[str]] = {
 }
 
 # --- local patch: extra signals (see local_extras.py) ---
-from .local_extras import LOCAL_EXTRA_CATEGORIES, LOCAL_EXTRA_INTERVALS  # noqa: E402
+from .local_extras import LOCAL_EXTRA_CATEGORIES, LOCAL_EXTRA_INTERVALS
 
 DEFAULT_INTERVALS_SECONDS.update(LOCAL_EXTRA_INTERVALS)
 for _cat, _sigs in LOCAL_EXTRA_CATEGORIES.items():
