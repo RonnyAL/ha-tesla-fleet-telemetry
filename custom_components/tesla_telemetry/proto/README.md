@@ -9,7 +9,7 @@ Tesla's telemetry stream uses a two-layer wire format:
 
 | Source                                | Commit (pinned)                            |
 | ------------------------------------- | ------------------------------------------ |
-| `schemas/vehicle_*.proto`             | `teslamotors/fleet-telemetry@20df968d7a09e8ec4e8b0175e0cc1a6153c34b2e` (`protos/`) |
+| `schemas/vehicle_*.proto`             | `teslamotors/fleet-telemetry@20df968d7a09e8ec4e8b0175e0cc1a6153c34b2e` (`protos/`); `vehicle_data.proto` locally bumped to `8fbaa100bd365936dab6ecbf0e2d7070c4d765cb` (additive: 10 new Field values) |
 | `schemas/tesla_envelope.fbs`          | reconstructed from same commit (`messages/tesla/Flatbuffers*.go`) |
 
 ## Generated files (do not edit)

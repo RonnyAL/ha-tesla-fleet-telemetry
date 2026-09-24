@@ -189,6 +189,14 @@ SIGNAL_CATEGORIES: dict[str, list[str]] = {
     ],
 }
 
+# --- local patch: extra signals (see local_extras.py) ---
+from .local_extras import LOCAL_EXTRA_CATEGORIES, LOCAL_EXTRA_INTERVALS  # noqa: E402
+
+DEFAULT_INTERVALS_SECONDS.update(LOCAL_EXTRA_INTERVALS)
+for _cat, _sigs in LOCAL_EXTRA_CATEGORIES.items():
+    SIGNAL_CATEGORIES[_cat].extend(s for s in _sigs if s not in SIGNAL_CATEGORIES[_cat])
+# --- end local patch ---
+
 # Per-signal overrides configured through the options flow, stored on
 # ``entry.options`` as ``{signal_name: interval_seconds}``. A stored 0 disables
 # a signal that's on by default; a positive value overrides its interval. Only
@@ -282,7 +290,7 @@ TESLA_USER_TOKEN_URL = "https://auth.tesla.com/oauth2/v3/token"
 # grants on the one URL.
 OAUTH_AUTHORIZE_URL = "https://auth.tesla.com/oauth2/v3/authorize"
 OAUTH_TOKEN_URL = TESLA_USER_TOKEN_URL
-OAUTH_SCOPES = ["openid", "offline_access", "vehicle_device_data"]
+OAUTH_SCOPES = ["openid", "offline_access", "vehicle_device_data", "vehicle_location"]
 
 # Region → Fleet API base URL. Default is North America.
 REGION_NA = "na"

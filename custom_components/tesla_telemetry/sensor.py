@@ -131,6 +131,10 @@ async def async_setup_entry(
             EstimatedSignalCostSensor(coordinator, entry),
         ]
     )
+    # local patch: extra entities (see local_extras.py)
+    from .local_extras import local_sensor_entities
+
+    async_add_entities(local_sensor_entities(coordinator))
 
 
 # ---------------------------------------------------------------------------

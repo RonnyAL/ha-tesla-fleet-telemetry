@@ -126,6 +126,10 @@ async def async_setup_entry(
             UserPresentBinarySensor(coordinator),
         ]
     )
+    # local patch: extra entities (see local_extras.py)
+    from .local_extras import local_binary_sensor_entities
+
+    async_add_entities(local_binary_sensor_entities(coordinator))
 
 
 # ---------------------------------------------------------------------------
