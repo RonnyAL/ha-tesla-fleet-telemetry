@@ -22,3 +22,18 @@ jobs:
         run: pip install -r requirements_test.txt
       - name: Run tests
         run: pytest
+
+  signal-metadata:
+    name: signal metadata is current
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.14"
+      # No dependencies: the generator is stdlib-only by design, and --check
+      # never touches the network.
+      - name: Check the generated metadata matches its inputs
+        run: python3 scripts/gen_signal_metadata.py --check
