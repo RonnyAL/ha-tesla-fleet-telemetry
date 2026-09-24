@@ -2,6 +2,10 @@
 #
 # The protobuf / flatbuffers bindings under proto/ are generated code,
 # vendored verbatim from Tesla's schemas, and excluded from linting.
+# signal_metadata.py is likewise generated — see scripts/gen_signal_metadata.py.
 target-version = "py312"
 line-length = 88
-extend-exclude = ["custom_components/tesla_telemetry/proto"]
+extend-exclude = [
+    "custom_components/tesla_telemetry/proto",
+    "custom_components/tesla_telemetry/signal_metadata.py",
+]

@@ -31,3 +31,30 @@ def test_spot_checks() -> None:
 def test_covers_most_numeric_signals() -> None:
     """A floor, not an exact count, so adding an override does not fail."""
     assert len(OVERRIDES) >= 80
+
+
+def test_no_duplicate_keys() -> None:
+    """Python silently keeps the last of two identical dict keys.
+
+    A duplicate added while hand-editing this table would override an earlier
+    entry with no error and no visible symptom — it happened once while
+    seeding the table, where a later hand-written entry shadowed a
+    cross-referenced one.
+    """
+    import ast
+    from pathlib import Path
+
+    source = (
+        Path(__file__).resolve().parents[2] / "signal_catalog/overrides.py"
+    ).read_text()
+    assignment = next(
+        node
+        for node in ast.parse(source).body
+        if isinstance(node, ast.AnnAssign)
+        and isinstance(node.target, ast.Name)
+        and node.target.id == "OVERRIDES"
+    )
+    assert isinstance(assignment.value, ast.Dict)
+    keys = [k.value for k in assignment.value.keys if isinstance(k, ast.Constant)]
+    duplicates = sorted({k for k in keys if keys.count(k) > 1})
+    assert not duplicates, f"duplicate keys in OVERRIDES: {duplicates}"

@@ -38,10 +38,18 @@ OVERRIDES: dict[str, Override] = {
     'BrickVoltageMax': Override('V', 'voltage', 'measurement'),  # teslemetry
     'BrickVoltageMin': Override('V', 'voltage', 'measurement'),  # teslemetry
     'ChargeAmps': Override('A', 'current', 'measurement'),  # teslemetry
+    # "The requested amps to charge the vehicle."
+    'ChargeCurrentRequest': Override('A', 'current', 'measurement'),
+    # "...as a percentage of battery capacity."
+    'ChargeLimitSoc': Override('%', 'battery', 'measurement'),
     'ChargeRateMilePerHour': Override('mph', 'speed', 'measurement'),  # teslemetry
     'ChargerVoltage': Override('V', 'voltage', 'measurement'),  # teslemetry
     'ChargingCableType': Override(None, 'enum', None),  # teslemetry
-    'CruiseFollowDistance': Override('s', 'duration', None),  # teslemetry
+    # NOT teslemetry's UnitOfTime.SECONDS/DURATION: Tesla documents this as
+    # type 'enum' with proto enum FollowDistance, whose members are
+    # FollowDistance1..FollowDistance7 — the 1-7 setting in vehicle controls,
+    # not a time. A duration unit here would be meaningless.
+    'CruiseFollowDistance': Override(None, 'enum', None),
     'CruiseSetSpeed': Override('mph', 'speed', 'measurement'),  # teslemetry
     'CurrentLimitMph': Override('mph', 'speed', 'measurement'),  # teslemetry
     'DCChargingEnergyIn': Override('kWh', 'energy', 'total_increasing'),  # teslemetry
@@ -92,7 +100,12 @@ OVERRIDES: dict[str, Override] = {
     'LightsTurnSignal': Override(None, 'enum', None),  # teslemetry
     'MilesSinceReset': Override('mi', 'distance', 'total_increasing'),  # teslemetry
     'MilesToArrival': Override('mi', 'distance', 'measurement'),  # teslemetry
-    'MinutesToArrival': Override(None, 'timestamp', None),  # teslemetry
+    # "The minutes until arriving at the navigation destination."
+    # teslemetry maps this to device_class=timestamp, converting the value to
+    # an absolute arrival time in its own code. This table describes the raw
+    # signal, and the generic entity path passes values through unconverted,
+    # so a timestamp device class on a bare number would break the entity.
+    'MinutesToArrival': Override('min', 'duration', 'measurement'),
     'ModuleTempMax': Override('°C', None, 'measurement'),  # teslemetry
     'ModuleTempMin': Override('°C', None, 'measurement'),  # teslemetry
     'Odometer': Override('mi', 'distance', 'total_increasing'),  # teslemetry
@@ -111,9 +124,15 @@ OVERRIDES: dict[str, Override] = {
     'SelfDrivingMilesSinceReset': Override('mi', 'distance', 'total_increasing'),  # teslemetry
     'SentryMode': Override(None, 'enum', None),  # teslemetry
     'Soc': Override('%', 'battery', 'measurement'),  # teslemetry
+    # "The percent of the software update that has been downloaded."
+    # No device_class: a download percentage is not a battery level.
+    'SoftwareUpdateDownloadPercentComplete': Override('%', None, 'measurement'),
     'SoftwareUpdateExpectedDurationMinutes': Override('min', 'duration', 'measurement'),  # teslemetry
+    # "The percent a software update has finished installing."
+    'SoftwareUpdateInstallationPercentComplete': Override('%', None, 'measurement'),
     'SpeedLimitWarning': Override(None, 'enum', None),  # teslemetry
-    'TimeToFullCharge': Override(None, 'timestamp', None),  # teslemetry
+    # "The number of hours until charging is complete."
+    'TimeToFullCharge': Override('h', 'duration', 'measurement'),
     'TonneauTentMode': Override(None, 'enum', None),  # teslemetry
     'TpmsPressureFl': Override('bar', 'pressure', 'measurement'),  # teslemetry
     'TpmsPressureFr': Override('bar', 'pressure', 'measurement'),  # teslemetry
