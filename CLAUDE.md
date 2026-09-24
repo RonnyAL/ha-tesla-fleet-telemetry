@@ -93,10 +93,18 @@ hand-written entity code per signal.
 7. Region is fixed to NA upstream (PR #2 fixes it).
 8. Troubleshooting docs should mention: `key_paired: false` / `config: null`
    in `get_telemetry_config` means the virtual key isn't on the car
-   (`https://tesla.com/_ak/<partner-domain>`); the Fleet API
-   `/api/1/vehicles/{vin}/fleet_telemetry_errors` endpoint (worth exposing as a
-   service); HA only logs `vehicle connected` at info level; nginx logs
-   WebSocket requests to the access log only when they close.
+   (`https://tesla.com/_ak/<partner-domain>`); the Fleet API telemetry-errors
+   endpoint (worth exposing as a service); HA only logs `vehicle connected` at
+   info level; nginx logs WebSocket requests to the access log only when they
+   close.
+   **Correction:** that endpoint is *not* `/api/1/vehicles/{vin}/
+   fleet_telemetry_errors` as written here originally. It is
+   `GET /api/1/partner_accounts/fleet_telemetry_errors?domain=<partner-domain>`,
+   it needs the **partner** (client_credentials) token rather than the user
+   token, and it is scoped to the partner domain rather than to one VIN.
+   Confirmed against Tesla's partner-endpoints docs ("This endpoint requires a
+   partner authentication token") and `Teslemetry/tesla_fleet_api`, which
+   implements it on its Partner class. Done in Phase 1.
 
 ## Roadmap
 
