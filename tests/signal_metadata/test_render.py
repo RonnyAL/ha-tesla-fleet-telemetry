@@ -35,7 +35,11 @@ def test_rendering_is_deterministic() -> None:
 
 def test_records_round_trip() -> None:
     namespace: dict[str, object] = {}
-    exec(compile(render_module(RECORDS), "signal_metadata.py", "exec"), namespace)
+    # S102: the "untrusted input" the rule guards against is source we
+    # generated two lines up; executing it is the point of the test.
+    exec(  # noqa: S102
+        compile(render_module(RECORDS), "signal_metadata.py", "exec"), namespace
+    )
     signals = namespace["SIGNALS"]
     assert signals["VehicleSpeed"].field_id == 4
     assert signals["VehicleSpeed"].unit == "mph"
