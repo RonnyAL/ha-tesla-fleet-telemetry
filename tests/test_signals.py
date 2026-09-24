@@ -78,10 +78,10 @@ def test_positive_override_changes_interval() -> None:
 
 
 def test_added_catalog_signal_appears_enabled() -> None:
-    entry = _entry({const.CONF_SIGNAL_OVERRIDES: {"Odometer": 60}})
+    entry = _entry({const.CONF_SIGNAL_OVERRIDES: {"Hvil": 60}})
     result = signals.resolve_effective_intervals(entry)
-    assert result["Odometer"] == 60
-    assert "Odometer" not in const.DEFAULT_INTERVALS_SECONDS  # truly an add
+    assert result["Hvil"] == 60
+    assert "Hvil" not in const.DEFAULT_INTERVALS_SECONDS  # truly an add
 
 
 def test_high_rate_preset_layers_on_top() -> None:
@@ -149,9 +149,9 @@ def test_parse_stores_only_changed_signals() -> None:
 def test_parse_add_signals_adds_at_default_interval() -> None:
     entry = _entry()
     form = _form_from({})
-    form["add_signals"] = {"signals": ["Odometer"]}
+    form["add_signals"] = {"signals": ["Hvil"]}
     parsed = signals.parse_options_input(entry, form)
-    assert parsed[const.CONF_SIGNAL_OVERRIDES]["Odometer"] == (
+    assert parsed[const.CONF_SIGNAL_OVERRIDES]["Hvil"] == (
         const.DEFAULT_NEW_SIGNAL_INTERVAL
     )
 
@@ -175,7 +175,35 @@ def test_all_catalog_signals_from_proto() -> None:
     catalog = signals.all_catalog_signals()
     assert "Unknown" not in catalog
     assert "VehicleSpeed" in catalog
-    assert "Odometer" in catalog
+    assert "Hvil" in catalog
     # Every curated default is a real catalog signal.
     assert set(const.DEFAULT_INTERVALS_SECONDS) <= set(catalog)
     assert len(catalog) > 200  # the full Field enum, not just the curated set
+
+
+# ---------------------------------------------------------------------------
+# Default-interval sanity for continuously-varying signals
+# ---------------------------------------------------------------------------
+# Push-on-change makes a tight ceiling free for a near-static signal, but these
+# move continuously while the car drives or charges, so the ceiling binds on
+# every interval and is what actually decides their volume. Pinned so a later
+# edit has to be deliberate about tightening them.
+CONTINUOUS_SIGNAL_FLOORS = {
+    "Odometer": 300,  # also its pre-v0.4.0 upstream value (c377e5d^)
+    "EnergyRemaining": 300,
+    "ExpectedEnergyPercentAtTripArrival": 300,
+    "LifetimeEnergyUsed": 3600,
+    "LifetimeEnergyGainedRegen": 3600,
+    "LifetimeEnergyChargedKwh": 3600,
+}
+
+
+def test_continuously_varying_signals_keep_a_long_ceiling() -> None:
+    for signal, floor in CONTINUOUS_SIGNAL_FLOORS.items():
+        actual = const.DEFAULT_INTERVALS_SECONDS.get(signal)
+        assert actual is not None, f"{signal} is no longer a default signal"
+        assert actual >= floor, (
+            f"{signal} defaults to {actual}s, below the {floor}s floor: it "
+            "changes continuously, so a tighter ceiling multiplies billed "
+            "signals for every user"
+        )
