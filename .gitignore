@@ -25,3 +25,6 @@ dist/
 
 # Internal session handoff notes — not for public repo
 HANDOFF.md
+
+# Superpowers scratch workspace (ledger, briefs, review packages)
+.superpowers/
