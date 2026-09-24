@@ -83,9 +83,9 @@ Entity IDs follow the vehicle's name, e.g. `sensor.<vehicle>_speed`,
 * Home Assistant **2024.12** or later.
 * A **Tesla developer account** with a registered *partner application*
   ([developer.tesla.com](https://developer.tesla.com/)). North America and
-  Europe are supported — pick the region at the start of the config flow.
-  (China is excluded, as in HA core's tesla_fleet: separate infrastructure,
-  untested.)
+  Europe are supported — the region is detected from your account and
+  confirmed in a step just after the Tesla login. (China is excluded, as in
+  HA core's tesla_fleet: separate infrastructure, untested.)
 * An **EC P-256 (secp256r1) partner key pair**, with the public key hosted at
   `https://<partner-domain>/.well-known/appspecific/com.tesla.3p.public-key.pem`.
 * A **publicly reachable reverse proxy** (nginx assumed) that:
@@ -140,7 +140,12 @@ server {
     ssl_verify_client on;
     ssl_verify_depth 2;
 
-    location /api/tesla_telemetry/ws {
+    # Vehicles connect to "/", not to the integration's path. The telemetry
+    # config you push carries only a hostname and a port — there is no path
+    # field — and Tesla's own server registers the WebSocket handler at "/"
+    # (server/streaming/server.go: mux.HandleFunc("/", ...ServeBinaryWs)).
+    # So map exactly "/" onto Home Assistant's view.
+    location = / {
         proxy_pass http://127.0.0.1:8123/api/tesla_telemetry/ws;
         proxy_http_version 1.1;
 
@@ -157,12 +162,26 @@ server {
         proxy_read_timeout 1h;
         proxy_send_timeout 1h;
     }
+
+    # Nothing else on this vhost is us. Without this, any other path would
+    # fall through to a default handler.
+    location / {
+        return 404;
+    }
 }
 ```
+
+**Mind the `=`.** `location = /` is an exact match and `location /` is a
+prefix match, so the two blocks above coexist. Writing both as plain
+`location /` makes nginx refuse to start with a duplicate-location error.
 
 The proxy secret is any shared string; the integration generates one for you
 in the config flow, and you paste that same value into the `proxy_set_header`
 line above.
+
+If you terminate TLS in Nginx Proxy Manager or another UI, the same rules
+apply: the vehicle's request is for `/`, and it must be forwarded to
+`/api/tesla_telemetry/ws` on Home Assistant with the two headers added.
 
 ### 3. Install the integration
 
@@ -182,8 +201,14 @@ Assistant `config/custom_components/` directory and restart.)
 1. **Settings → Devices & Services → Application Credentials** — add the Tesla
    **client ID** and **client secret** from step 1.
 2. **Settings → Devices & Services → Add Integration → Tesla Fleet Telemetry.**
-3. Complete the Tesla OAuth login, then pick the **VIN** to track.
-4. On the **endpoint** step, enter:
+3. Complete the Tesla OAuth login. The authorize request is region-independent,
+   so the **region** step comes *after* it: the account's region is detected
+   from the access token and preselected for you to confirm. Getting this right
+   matters — North America and Europe are different Fleet API hosts, and an EU
+   account querying the NA host fails. China is not offered; its auth
+   infrastructure differs and these paths are untested against it.
+4. Pick the **VIN** to track.
+5. On the **endpoint** step, enter:
    * the public **hostname** and **port** nginx listens on,
    * the **partner domain** hosting your `.well-known` public key,
    * the **proxy secret** (used in the nginx config above),
@@ -214,7 +239,8 @@ its own Home Assistant device with its own entities. Service calls take an
 | --- | --- |
 | `tesla_telemetry.bootstrap` | One-time onboarding: register the partner domain and push the initial config. |
 | `tesla_telemetry.resync_telemetry_config` | Re-push the config. Runs automatically (the config's `exp` is ~30 days); rarely needed by hand. |
-| `tesla_telemetry.get_telemetry_config` | Fetch Tesla's current config for the VIN — check `synced`. |
+| `tesla_telemetry.get_telemetry_config` | Fetch Tesla's current config for the VIN — check `synced` and `key_paired`. |
+| `tesla_telemetry.get_telemetry_errors` | Fetch the errors vehicles reported after receiving the config — the fastest way to find out why a car accepted the config but never connected. |
 | `tesla_telemetry.dump_public_key` | Emit the partner public key PEM, ready to host at `.well-known`. |
 | `tesla_telemetry.set_interval_preset` | Switch streaming intervals between `default` and `high_rate` (~1 s location/speed). |
 
@@ -224,16 +250,42 @@ more than 7 days old, so no manual upkeep is required.
 
 ## Troubleshooting
 
+**Start with `tesla_telemetry.get_telemetry_errors`.** It returns what the
+vehicle itself reported after receiving the config — a wrong hostname, an
+untrusted certificate chain, a TLS or mTLS failure. A car that cannot connect
+is otherwise completely silent from Home Assistant's side.
+
+* **`key_paired: false`, or `config: null`, in `get_telemetry_config`.** The
+  virtual key is not on the car. Open
+  `https://tesla.com/_ak/<your-partner-domain>` on a phone with the Tesla app
+  installed and add the key to the vehicle. Until that is done the car ignores
+  the telemetry config entirely, and nothing else in this list will help.
 * **`synced: false` for a long time.** Tesla's flag lags reality. If the nginx
   access log shows a `Hermes/...` connection, the car has the config.
+* **Nothing at all in the nginx access log.** nginx logs a WebSocket request
+  only when the connection *closes*, so a healthy, long-lived stream looks
+  identical to no connection at all. Check the error log, and check
+  `get_telemetry_errors`, before assuming the car never arrived.
+* **No sign of it in the Home Assistant log either.** The connection is logged
+  at info level (`vehicle connected`), which is below the default threshold.
+  Raise the level as shown below to see it.
 * **TLS handshake failures in the nginx error log.** The vehicle is rejecting
   nginx's server certificate. Make sure the certificate chain is anchored in
   the CA bundle pushed as `fleet_telemetry_config.ca` — pass a `ca_pem`
   override to `bootstrap`/`resync_telemetry_config` if you use a CA outside
-  the default bundle.
+  the default bundle. The override is remembered and reused by later automatic
+  re-pushes; pass an empty value to go back to the default bundle.
+* **404s in the nginx access log.** The vehicle requests `/`, not
+  `/api/tesla_telemetry/ws`. See the `location = /` block above.
 * **nginx connects but no entities update.** Check the `X-Tesla-Proxy-Secret`
   header in the nginx config matches the proxy secret stored in the config
   entry, and that `X-Tesla-Verified-Vin` carries the certificate subject.
+* **`missing scopes` from Tesla, or entities that stopped updating after an
+  upgrade.** The integration's OAuth scopes changed. A stored refresh token
+  carries the scopes it was minted with, so an existing entry keeps the old
+  set until you re-authorize: **Settings → Devices & Services →
+  Tesla Fleet Telemetry → ⋮ → Reconfigure**. Your vehicle, endpoint and signal
+  settings — and all entity history — are preserved.
 * Enable debug logging with:
   ```yaml
   logger:
