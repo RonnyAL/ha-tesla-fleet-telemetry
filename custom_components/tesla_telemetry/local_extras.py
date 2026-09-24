@@ -17,6 +17,20 @@ from typing import Any
 # ---------------------------------------------------------------------------
 # Signals + default intervals (seconds). Push-on-change still applies: the
 # interval is only a ceiling while a value is actually moving.
+#
+# That is what decides a sensible default here, not the number in isolation. A
+# near-static boolean (ValetModeEnabled, LocatedAtHome, SentryMode) costs
+# essentially nothing at a 5 s ceiling, because the car only sends it when it
+# flips — and the tight ceiling keeps the UI responsive when it does. The
+# signals worth spending a long ceiling on are the ones whose value moves
+# continuously, where the ceiling binds on every single interval:
+#
+#   Odometer, EnergyRemaining, ExpectedEnergyPercentAtTripArrival — move
+#   continuously while driving, so they are held at 300 s. Odometer's 300 s is
+#   also the value it carried upstream before v0.4.0 removed it (c377e5d^).
+#   LifetimeEnergy{Used,GainedRegen,ChargedKwh} — monotonic counters that
+#   increment throughout every drive and charge. Nothing consumes them at
+#   five-minute resolution, so they sit at 3600 s.
 # ---------------------------------------------------------------------------
 LOCAL_EXTRA_INTERVALS: dict[str, int] = {
     # charging
@@ -29,7 +43,7 @@ LOCAL_EXTRA_INTERVALS: dict[str, int] = {
     "ScheduledChargingPending": 30,
     "PreconditioningEnabled": 5,
     # battery
-    "EnergyRemaining": 60,
+    "EnergyRemaining": 300,
     "BatteryHeaterOn": 10,
     # climate
     "HvacPower": 5,
@@ -51,13 +65,13 @@ LOCAL_EXTRA_INTERVALS: dict[str, int] = {
     "TpmsSoftWarnings": 60,
     "TpmsHardWarnings": 60,
     # driving
-    "Odometer": 60,
-    "ExpectedEnergyPercentAtTripArrival": 60,
+    "Odometer": 300,
+    "ExpectedEnergyPercentAtTripArrival": 300,
     # battery health / lifetime
     "NominalFullPackEnergyKwh": 3600,
-    "LifetimeEnergyChargedKwh": 300,
-    "LifetimeEnergyUsed": 300,
-    "LifetimeEnergyGainedRegen": 300,
+    "LifetimeEnergyChargedKwh": 3600,
+    "LifetimeEnergyUsed": 3600,
+    "LifetimeEnergyGainedRegen": 3600,
     # schedules
     "ScheduledChargingStartTime": 60,
     "ScheduledDepartureTime": 60,
