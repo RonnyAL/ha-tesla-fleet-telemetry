@@ -12,10 +12,12 @@ partial table would look exactly like "Tesla deleted most of the catalog".
 """
 from __future__ import annotations
 
+import io
 from typing import Any
 
 import pytest
 
+from scripts.signal_metadata import tesla_docs
 from scripts.signal_metadata.tesla_docs import (
     CatalogError,
     fetch_catalog,
@@ -72,16 +74,47 @@ def test_no_matching_static_query_is_an_error() -> None:
         fetch_catalog(opener=_opener(pages))
 
 
-def test_non_json_body_is_an_error() -> None:
+def test_non_json_body_is_an_error(monkeypatch: pytest.MonkeyPatch) -> None:
     """Review Focus 1: an HTTP 200 carrying an interstitial or login wall.
 
-    The opener raises on a JSON decode failure; the point is that it
-    propagates as CatalogError rather than yielding an empty catalogue.
+    This drives the real `_urlopen_json`, not a stub that raises on our
+    behalf: the code under test is the `json.JSONDecodeError` handler, and a
+    fake opener that raises CatalogError itself would pass even if that
+    handler were deleted.
     """
-    def broken(url: str) -> Any:
-        raise CatalogError("expecting value: line 1 column 1")
-    with pytest.raises(CatalogError):
-        fetch_catalog(opener=broken)
+    class _HtmlResponse(io.BytesIO):
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc: object) -> None:
+            self.close()
+
+    monkeypatch.setattr(
+        tesla_docs.urllib.request,
+        "urlopen",
+        lambda *a, **kw: _HtmlResponse(b"<!DOCTYPE html><html>Just a moment...</html>"),
+    )
+    with pytest.raises(CatalogError, match="did not return JSON"):
+        fetch_catalog()
+
+
+def test_non_utf8_body_is_an_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A gzip or binary body decoded as text must also fail closed, with a
+    message naming the URL rather than a bare codec error."""
+    class _BinaryResponse(io.BytesIO):
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc: object) -> None:
+            self.close()
+
+    monkeypatch.setattr(
+        tesla_docs.urllib.request,
+        "urlopen",
+        lambda *a, **kw: _BinaryResponse(b"\x1f\x8b\x08\x00\xff\xfe"),
+    )
+    with pytest.raises(CatalogError, match="page-data"):
+        fetch_catalog()
 
 
 def test_validate_rejects_an_implausibly_small_catalog() -> None:
@@ -111,3 +144,10 @@ def test_validate_accepts_a_plausible_catalog() -> None:
     ]
     validate_catalog(nodes)  # must not raise
 
+
+
+def test_valid_json_that_is_not_an_object_is_an_error() -> None:
+    """A JSON list or scalar body must fail closed, not raise AttributeError
+    out of fetch_catalog where the CLI does not catch it."""
+    with pytest.raises(CatalogError, match="not an object"):
+        fetch_catalog(opener=lambda url: ["unexpected"])

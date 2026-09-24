@@ -46,6 +46,11 @@ def _urlopen_json(url: str) -> Any:
         raise CatalogError(f"fetching {url}: {err}") from err
     except json.JSONDecodeError as err:
         raise CatalogError(f"{url} did not return JSON: {err}") from err
+    except UnicodeDecodeError as err:
+        # A gzip or otherwise binary body. Without this the codec error
+        # escapes with no URL in it, so the log says nothing about where the
+        # failure came from.
+        raise CatalogError(f"{url} did not return decodable text: {err}") from err
 
 
 def fetch_catalog(
@@ -53,6 +58,10 @@ def fetch_catalog(
 ) -> list[dict[str, Any]]:
     """Return the catalogue records, or raise CatalogError."""
     page = opener(PAGE_DATA)
+    if not isinstance(page, dict):
+        # Valid JSON need not be an object; without this a list or scalar
+        # body raises AttributeError, which main() does not catch.
+        raise CatalogError(f"{PAGE_DATA} returned {type(page).__name__}, not an object")
     hashes = page.get("staticQueryHashes") or []
     if not hashes:
         raise CatalogError(f"no staticQueryHashes in {PAGE_DATA}")

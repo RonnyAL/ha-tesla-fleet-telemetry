@@ -20,9 +20,17 @@ from .proto_parser import ProtoField
 PLACEHOLDER_PREFIXES: tuple[str, ...] = ("Deprecated_", "Experimental_")
 _NOT_A_SIGNAL = frozenset({"Unknown"})
 
-# Types for which a unit is meaningless. An override putting one on these
-# is a mistake worth failing over, not quietly dropping.
-_NON_NUMERIC_TYPES = frozenset({"boolean", "string", "enum", "Location"})
+# Types for which a unit or a state_class is meaningless. An override putting
+# one on these is a mistake worth failing over, not quietly dropping — this is
+# the only automated check on a hand-maintained table.
+#
+# `time` and `timestamp` belong here as much as `boolean` does: "kWh" on an
+# arrival time is exactly the same error. device_class is deliberately NOT
+# checked, because `enum` is the correct device class for an enum signal and
+# twenty overrides legitimately set it.
+_NON_NUMERIC_TYPES = frozenset(
+    {"boolean", "string", "enum", "Location", "time", "timestamp"}
+)
 
 
 class ReconcileError(Exception):
@@ -87,11 +95,14 @@ def reconcile(
         value_type = _clean(node.get("type"))
         override = overrides.get(name)
 
-        if override is not None and override.unit and value_type in _NON_NUMERIC_TYPES:
-            raise ReconcileError(
-                f"{name}: override sets unit {override.unit!r} but Tesla "
-                f"documents the type as {value_type!r}"
-            )
+        if override is not None and value_type in _NON_NUMERIC_TYPES:
+            for attribute in ("unit", "state_class"):
+                offending = getattr(override, attribute, None)
+                if offending:
+                    raise ReconcileError(
+                        f"{name}: override sets {attribute} {offending!r} but "
+                        f"Tesla documents the type as {value_type!r}"
+                    )
 
         records.append(
             SignalRecord(

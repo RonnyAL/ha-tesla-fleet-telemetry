@@ -95,6 +95,11 @@ OVERRIDES: dict[str, Override] = {
     'IdealBatteryRange': Override('mi', 'distance', 'measurement'),  # teslemetry
     'InsideTemp': Override('°C', 'temperature', 'measurement'),  # teslemetry
     'LaneDepartureAvoidance': Override(None, 'enum', None),  # teslemetry
+    # Undocumented by Tesla, so the generator has no type for it. The unit
+    # is in Tesla's own field name (…Kwh), which is a statement rather than
+    # an inference; LifetimeEnergyGainedRegen below is the same quantity and
+    # teslemetry gives it kWh.
+    'LifetimeEnergyChargedKwh': Override('kWh', 'energy', 'total_increasing'),
     'LifetimeEnergyGainedRegen': Override('kWh', 'energy', 'total_increasing'),  # teslemetry
     'LifetimeEnergyUsed': Override('kWh', 'energy', 'total_increasing'),  # teslemetry
     'LightsTurnSignal': Override(None, 'enum', None),  # teslemetry
@@ -108,6 +113,9 @@ OVERRIDES: dict[str, Override] = {
     'MinutesToArrival': Override('min', 'duration', 'measurement'),
     'ModuleTempMax': Override('°C', None, 'measurement'),  # teslemetry
     'ModuleTempMin': Override('°C', None, 'measurement'),  # teslemetry
+    # Undocumented by Tesla; the unit is in the field name (…Kwh). Pack
+    # capacity is a measurement, not a running total, so no total_increasing.
+    'NominalFullPackEnergyKwh': Override('kWh', 'energy', 'measurement'),
     'Odometer': Override('mi', 'distance', 'total_increasing'),  # teslemetry
     'OutsideTemp': Override('°C', 'temperature', 'measurement'),  # teslemetry
     'PackCurrent': Override('A', 'current', 'measurement'),  # teslemetry

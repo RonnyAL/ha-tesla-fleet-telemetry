@@ -31,8 +31,14 @@ jobs:
       # validation error, so a broken chain turns this job red.
       - name: Refresh the catalog and regenerate
         run: |
+          # Not `... 2> warnings.txt` followed by `cat`: the default shell is
+          # `bash -e`, so a generator failure would skip the cat and bury the
+          # only diagnosis of why the canary tripped.
+          set +e
           python3 scripts/gen_signal_metadata.py 2> warnings.txt
-          cat warnings.txt
+          rc=$?
+          cat warnings.txt >&2
+          exit $rc
 
       - name: Stop if nothing changed
         id: diff
@@ -63,11 +69,26 @@ jobs:
           BRANCH=chore/signal-catalog-refresh
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          # actions/checkout fetches only the triggering ref, so the
+          # remote-tracking ref for $BRANCH does not exist here. A bare
+          # --force-with-lease would then expect "ref must not exist" and be
+          # rejected as stale on every run after the first, which is exactly
+          # the update-in-place behaviour this fixed branch is for. Fetch the
+          # branch and pass the expected sha explicitly; a shallow fetch is
+          # not enough, and --force-with-lease=$BRANCH with no value still
+          # fails because a fresh clone has no reflog for the tracking ref.
+          git fetch origin "+refs/heads/$BRANCH:refs/remotes/origin/$BRANCH" || true
+          EXPECT=$(git rev-parse --verify -q "refs/remotes/origin/$BRANCH" || true)
+
           git checkout -B "$BRANCH"
           git add signal_catalog/tesla_fields.json \
                   custom_components/tesla_telemetry/signal_metadata.py
           git commit -m "Refresh the vendored Tesla signal catalog"
-          git push --force-with-lease origin "$BRANCH"
+          if [ -n "$EXPECT" ]; then
+            git push --force-with-lease="$BRANCH:$EXPECT" origin "$BRANCH"
+          else
+            git push origin "$BRANCH"
+          fi
 
           {
             echo "Tesla's published signal catalog changed."

@@ -32,6 +32,15 @@ DIMENSIONLESS = {
 
 _NUMERIC = {"real", "integer"}
 
+# Signals Tesla does not document, so `value_type` is None and the numeric
+# check below cannot classify them. Each must be accounted for by hand or a
+# new unitless default slips through — which is exactly what happened to
+# LifetimeEnergyChargedKwh and NominalFullPackEnergyKwh.
+UNDOCUMENTED_WITHOUT_UNIT = {
+    "RemoteStartActive": "boolean — whether remote start is active",
+    "ScheduledDepartureTime": "a clock time, rendered as HH:MM",
+}
+
 
 def test_numeric_defaults_have_a_unit_or_are_listed_dimensionless() -> None:
     missing = sorted(
@@ -46,6 +55,38 @@ def test_numeric_defaults_have_a_unit_or_are_listed_dimensionless() -> None:
         f"numeric default signals with no unit: {missing}. Add a unit to "
         "signal_catalog/overrides.py, or add the name to DIMENSIONLESS here "
         "if it genuinely has no unit."
+    )
+
+
+def test_undocumented_defaults_are_explicitly_classified() -> None:
+    """Undocumented signals have value_type=None, so the numeric check above
+    skips them entirely — the hole that let two kWh energy signals ship with
+    no unit and no device class."""
+    unclassified = sorted(
+        name
+        for name in DEFAULT_INTERVALS_SECONDS
+        if (meta := SIGNALS.get(name)) is not None
+        and meta.value_type is None
+        and not meta.unit
+        and name not in UNDOCUMENTED_WITHOUT_UNIT
+        and name not in DIMENSIONLESS
+    )
+    assert not unclassified, (
+        f"undocumented default signals with no unit: {unclassified}. Tesla "
+        "does not publish a type for these, so classify each by hand: give it "
+        "a unit in signal_catalog/overrides.py, or list it in "
+        "UNDOCUMENTED_WITHOUT_UNIT here with the reason it has none."
+    )
+
+
+def test_undocumented_exemptions_are_not_stale() -> None:
+    stale = sorted(
+        name
+        for name in UNDOCUMENTED_WITHOUT_UNIT
+        if (meta := SIGNALS.get(name)) is not None and meta.unit
+    )
+    assert not stale, (
+        f"these now have units and should leave UNDOCUMENTED_WITHOUT_UNIT: {stale}"
     )
 
 

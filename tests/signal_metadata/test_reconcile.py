@@ -131,3 +131,38 @@ def test_empty_strings_normalise_to_none() -> None:
 def test_records_are_sorted_by_field_id() -> None:
     records, _ = reconcile(PROTO, NODES, {})
     assert [r.field_id for r in records] == sorted(r.field_id for r in records)
+
+
+def test_unit_on_a_timestamp_is_a_hard_error() -> None:
+    """A unit on a timestamp is as meaningless as a unit on a boolean.
+
+    `time` and `timestamp` were missing from the guarded set, leaving most of
+    the ways to mis-enter a hand-maintained override unchecked.
+    """
+    proto = ProtoField(ids={"RouteLastUpdated": 300}, firmware={}, semi_only=frozenset())
+    nodes = [{"field_name": "RouteLastUpdated", "category": "Driving",
+              "type": "timestamp", "proto_enum_name": ""}]
+    with pytest.raises(ReconcileError, match="RouteLastUpdated"):
+        reconcile(proto, nodes, {"RouteLastUpdated": Override("kWh", "energy", None)})
+
+
+def test_unit_on_a_time_is_a_hard_error() -> None:
+    proto = ProtoField(ids={"SomeTime": 301}, firmware={}, semi_only=frozenset())
+    nodes = [{"field_name": "SomeTime", "category": "Driving", "type": "time",
+              "proto_enum_name": ""}]
+    with pytest.raises(ReconcileError, match="SomeTime"):
+        reconcile(proto, nodes, {"SomeTime": Override("mi", "distance", None)})
+
+
+def test_state_class_on_a_non_numeric_is_a_hard_error() -> None:
+    """state_class describes how a number aggregates; it is meaningless on an
+    enum or boolean, and setting one is the same class of typo as a bad unit."""
+    with pytest.raises(ReconcileError, match="Locked"):
+        reconcile(PROTO, NODES, {"Locked": Override(None, None, "measurement")})
+
+
+def test_enum_device_class_on_an_enum_is_still_allowed() -> None:
+    """The 20 enum signals legitimately carry device_class='enum'; the
+    stricter rule must not reject them."""
+    records, _ = reconcile(PROTO, NODES, {"Locked": Override(None, "enum", None)})
+    assert _by_name(records)["Locked"].device_class == "enum"

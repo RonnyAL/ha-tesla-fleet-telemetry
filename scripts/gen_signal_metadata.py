@@ -89,7 +89,14 @@ def main(argv: list[str] | None = None) -> int:
     if not offline:
         SNAPSHOT.write_text(json.dumps(nodes, indent=2, sort_keys=True) + "\n")
     GENERATED.write_text(rendered)
-    print(f"wrote {len(records)} signals to {GENERATED.relative_to(REPO)}")
+    # relative_to raises when the target is outside the repo, which it is
+    # whenever a test points these paths at a temporary directory. A status
+    # line must not be able to fail the run.
+    try:
+        where: Path | str = GENERATED.relative_to(REPO)
+    except ValueError:
+        where = GENERATED
+    print(f"wrote {len(records)} signals to {where}")
     return EXIT_OK
 
 
