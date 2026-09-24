@@ -8,6 +8,10 @@
       "auth": {
         "title": "Authorize with Tesla"
       },
+      "reauth_confirm": {
+        "title": "Re-authorize with Tesla",
+        "description": "Sign in to Tesla again for {vehicle} ({vin}).\n\nThis is needed when the stored login stops working, or after the integration starts requesting a new permission — Tesla only grants added permissions on a fresh sign-in, so existing entries keep using the ones they were created with until you re-authorize here.\n\nYour vehicle, endpoint and signal settings are kept, and the vehicle's history is preserved. Sign in with the same Tesla account."
+      },
       "region": {
         "title": "Region",
         "description": "Tesla serves Fleet API accounts from regional endpoints. The region detected from your Tesla account is preselected — confirm it or correct it if needed.",
@@ -53,7 +57,9 @@
       "oauth_unauthorized": "Tesla rejected the OAuth flow — the developer app may not be approved for the requested scopes.",
       "oauth_unknown_error": "Unknown OAuth error.",
       "no_vehicles": "Tesla returned no vehicles for this account.",
-      "cannot_connect": "Could not reach Tesla. Check network connectivity and try again."
+      "cannot_connect": "Could not reach Tesla. Check network connectivity and try again.",
+      "reauth_successful": "Re-authorization was successful.",
+      "wrong_account": "That Tesla account does not list this vehicle. Re-authorize with the account that owns it."
     }
   },
   "options": {

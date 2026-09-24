@@ -3,9 +3,11 @@ from __future__ import annotations
 
 import logging
 
+import aiohttp
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
 from homeassistant.helpers import aiohttp_client, config_entry_oauth2_flow
 
 from .const import (
@@ -59,7 +61,23 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     )
     # Ensure we hold a fresh access token before the first API call —
     # also surfaces auth errors at setup time rather than mid-bootstrap.
-    await oauth_session.async_ensure_token_valid()
+    try:
+        await oauth_session.async_ensure_token_valid()
+    except aiohttp.ClientResponseError as err:
+        if err.status in (400, 401, 403):
+            # The refresh token is no longer usable (revoked in the Tesla
+            # account, or the chain broken). Raising ConfigEntryAuthFailed is
+            # what starts the reauth flow, so the user gets a "Reconfigure"
+            # prompt instead of an entry that silently never loads.
+            raise ConfigEntryAuthFailed(
+                f"Tesla rejected the stored credentials ({err.status}); "
+                "re-authorization is required"
+            ) from err
+        raise ConfigEntryNotReady(
+            f"Tesla token refresh failed ({err.status})"
+        ) from err
+    except (TimeoutError, aiohttp.ClientError) as err:
+        raise ConfigEntryNotReady(f"Tesla token refresh failed: {err}") from err
 
     # ``LocalOAuth2Implementation`` (the standard application_credentials
     # backing) exposes client_id / client_secret directly. We need them
