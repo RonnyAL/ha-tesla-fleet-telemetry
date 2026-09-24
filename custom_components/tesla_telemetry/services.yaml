@@ -29,7 +29,9 @@ bootstrap:
       description: >
         Override the default Let's Encrypt root bundle used as the
         vehicle's TLS trust anchor. Only set this if your hostname uses
-        a non-LE CA.
+        a non-LE CA. The value is remembered on the config entry and
+        reused by the daily auto-resync and by option changes; pass an
+        empty value to clear it and go back to the default bundle.
       required: false
       selector:
         text:

@@ -272,6 +272,15 @@ CONF_HOSTNAME = "hostname"
 CONF_PORT = "port"
 CONF_PRIVATE_KEY_PEM = "private_key_pem"
 
+# Persisted CA-bundle override. Absent (the normal case) means "use
+# DEFAULT_CA_BUNDLE_PEM". A `ca_pem:` passed to bootstrap / resync /
+# set_interval_preset is stored here so that every *later* push — the daily
+# auto-resync and the options-change re-push, neither of which takes service
+# data — keeps using it. Without this a private CA worked until the first
+# unattended push and then silently reverted, breaking the vehicle's TLS
+# trust anchor days after the change that caused it.
+CONF_CA_PEM = "ca_pem"
+
 # WebSocket endpoint registered on HA's HTTP server. nginx proxies the
 # vehicle's mTLS WSS connection here after validating the client cert.
 WS_PATH = "/api/tesla_telemetry/ws"

@@ -182,10 +182,11 @@ async def _async_options_updated(
     if api is None:
         return
 
-    from .services import _build_telemetry_config, _stamp_last_sync
-    from .tls_ca import DEFAULT_CA_BUNDLE_PEM
+    from .services import _build_telemetry_config, _stamp_last_sync, entry_ca_pem
 
-    cfg = _build_telemetry_config(entry, DEFAULT_CA_BUNDLE_PEM.strip() + "\n")
+    # entry_ca_pem honours a stored ca_pem override; using the default
+    # bundle here would quietly undo a private CA on the next options edit.
+    cfg = _build_telemetry_config(entry, entry_ca_pem(entry))
     try:
         result = await api.set_fleet_telemetry_config(entry.data[CONF_VIN], cfg)
     except Exception as err:  # noqa: BLE001 — never raise from an update listener

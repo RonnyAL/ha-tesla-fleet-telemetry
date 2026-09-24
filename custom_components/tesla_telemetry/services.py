@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import logging
 import time
+from collections.abc import Mapping
 from datetime import datetime, timedelta
 from typing import Any
 
@@ -37,6 +38,7 @@ from homeassistant.helpers.event import async_track_time_interval
 from .const import (
     AUTO_RESYNC_CHECK_INTERVAL_SECONDS,
     AUTO_RESYNC_MAX_AGE_SECONDS,
+    CONF_CA_PEM,
     CONF_HOSTNAME,
     CONF_INTERVAL_PRESET,
     CONF_LAST_SYNC_AT,
@@ -49,7 +51,7 @@ from .const import (
 )
 from .signals import resolve_effective_intervals
 from .tesla_api import TelemetryConfig, TelemetryFieldConfig, TeslaApi
-from .tls_ca import DEFAULT_CA_BUNDLE_PEM
+from .tls_ca import ca_bundle_pem
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -131,6 +133,43 @@ def _resolve_intervals(entry: ConfigEntry) -> dict[str, int]:
     return resolve_effective_intervals(entry)
 
 
+def _resolve_ca_pem(
+    hass: HomeAssistant, entry: ConfigEntry, call_data: Mapping[str, Any]
+) -> str:
+    """Resolve the CA bundle for a push, persisting an explicit override.
+
+    A `ca_pem:` on the service call is stored on the entry, because the pushes
+    that happen *without* service data — the daily auto-resync and the
+    options-change re-push — would otherwise fall back to
+    DEFAULT_CA_BUNDLE_PEM and silently swap the vehicle's trust anchor back
+    days later.
+
+    Passing an empty `ca_pem:` clears a stored override and returns to the
+    default bundle; omitting the key entirely leaves whatever is stored.
+    """
+    if ATTR_CA_PEM in call_data:
+        override = (call_data.get(ATTR_CA_PEM) or "").strip()
+        if override != (entry.data.get(CONF_CA_PEM) or ""):
+            data = {**entry.data}
+            if override:
+                data[CONF_CA_PEM] = override
+            else:
+                data.pop(CONF_CA_PEM, None)
+            hass.config_entries.async_update_entry(entry, data=data)
+            _LOGGER.info(
+                "tesla_telemetry: %s CA bundle override for vin=%s",
+                "stored" if override else "cleared",
+                entry.data.get(CONF_VIN),
+            )
+        return ca_bundle_pem(override)
+    return entry_ca_pem(entry)
+
+
+def entry_ca_pem(entry: ConfigEntry) -> str:
+    """The CA bundle this entry should push, honouring a stored override."""
+    return ca_bundle_pem(entry.data.get(CONF_CA_PEM))
+
+
 def _build_telemetry_config(entry: ConfigEntry, ca_pem: str) -> TelemetryConfig:
     return TelemetryConfig(
         hostname=entry.data[CONF_HOSTNAME],
@@ -173,7 +212,7 @@ async def _bootstrap_handler(call: ServiceCall) -> ServiceResponse:
             )
             response["partner_register_error"] = str(err)
 
-    ca_pem = (call.data.get(ATTR_CA_PEM) or DEFAULT_CA_BUNDLE_PEM).strip() + "\n"
+    ca_pem = _resolve_ca_pem(hass, entry, call.data)
     cfg = _build_telemetry_config(entry, ca_pem)
     response["telemetry_config"] = await api.set_fleet_telemetry_config(
         entry.data[CONF_VIN], cfg
@@ -191,7 +230,7 @@ async def _resync_handler(call: ServiceCall) -> ServiceResponse:
     hass = call.hass
     entry = _resolve_entry(hass, call.data.get(ATTR_ENTRY_ID))
     api = _entry_api(hass, entry)
-    ca_pem = (call.data.get(ATTR_CA_PEM) or DEFAULT_CA_BUNDLE_PEM).strip() + "\n"
+    ca_pem = _resolve_ca_pem(hass, entry, call.data)
     cfg = _build_telemetry_config(entry, ca_pem)
     response = await api.set_fleet_telemetry_config(entry.data[CONF_VIN], cfg)
     _stamp_last_sync(hass, entry)
@@ -237,7 +276,7 @@ async def _set_interval_preset_handler(call: ServiceCall) -> ServiceResponse:
     entry = hass.config_entries.async_get_entry(entry.entry_id)  # type: ignore[assignment]
     assert entry is not None
 
-    ca_pem = (call.data.get(ATTR_CA_PEM) or DEFAULT_CA_BUNDLE_PEM).strip() + "\n"
+    ca_pem = _resolve_ca_pem(hass, entry, call.data)
     cfg = _build_telemetry_config(entry, ca_pem)
     response = await api.set_fleet_telemetry_config(entry.data[CONF_VIN], cfg)
     _stamp_last_sync(hass, entry)
@@ -352,7 +391,7 @@ async def _auto_resync_if_due(hass: HomeAssistant, entry: ConfigEntry) -> None:
     except HomeAssistantError as err:
         _LOGGER.debug("tesla_telemetry: auto-resync skipped — %s", err)
         return
-    cfg = _build_telemetry_config(entry, DEFAULT_CA_BUNDLE_PEM.strip() + "\n")
+    cfg = _build_telemetry_config(entry, entry_ca_pem(entry))
     try:
         result = await api.set_fleet_telemetry_config(entry.data[CONF_VIN], cfg)
     except Exception as err:  # noqa: BLE001 — never surface from a timer tick
