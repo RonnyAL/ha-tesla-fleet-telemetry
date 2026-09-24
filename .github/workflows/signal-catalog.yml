@@ -1,0 +1,97 @@
+name: Signal catalog
+
+on:
+  schedule:
+    # Weekly. Tesla's catalogue changes rarely; a daily PR would be noise.
+    - cron: "17 5 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  refresh:
+    name: refresh the vendored catalog
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.14"
+
+      - name: Install test dependencies
+        run: pip install -r requirements_test.txt
+
+      # This step is also the live canary for the discovery chain: it fetches
+      # from Tesla, and the generator fails closed on any fetch, parse or
+      # validation error, so a broken chain turns this job red.
+      - name: Refresh the catalog and regenerate
+        run: |
+          python3 scripts/gen_signal_metadata.py 2> warnings.txt
+          cat warnings.txt
+
+      - name: Stop if nothing changed
+        id: diff
+        run: |
+          if git diff --quiet; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "Catalog unchanged."
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            git --no-pager diff --stat
+          fi
+
+      # A PR opened with GITHUB_TOKEN does not trigger other workflows
+      # (GitHub's anti-recursion rule), so the PR would otherwise arrive with
+      # no checks at all. Run them here and report the result in the body.
+      - name: Run the test suite
+        if: steps.diff.outputs.changed == 'true'
+        id: tests
+        continue-on-error: true
+        run: pytest -q
+
+      - name: Open or update the pull request
+        if: steps.diff.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          BRANCH=chore/signal-catalog-refresh
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -B "$BRANCH"
+          git add signal_catalog/tesla_fields.json \
+                  custom_components/tesla_telemetry/signal_metadata.py
+          git commit -m "Refresh the vendored Tesla signal catalog"
+          git push --force-with-lease origin "$BRANCH"
+
+          {
+            echo "Tesla's published signal catalog changed."
+            echo
+            echo "Read the diff to \`signal_catalog/tesla_fields.json\` — that is the"
+            echo "human-readable record of what changed. \`signal_metadata.py\` is"
+            echo "generated fallout, like \`vehicle_data_pb2.py\`."
+            echo
+            echo "Test suite: ${{ steps.tests.outcome }}"
+            echo
+            if [ -s warnings.txt ]; then
+              echo "### Generator warnings"
+              echo '```'
+              cat warnings.txt
+              echo '```'
+            fi
+          } > body.md
+
+          # --repo is mandatory: in a fork `gh` defaults to the PARENT repo,
+          # and this fork must never open a pull request against upstream.
+          gh pr create \
+            --repo "${{ github.repository }}" \
+            --base main \
+            --head "$BRANCH" \
+            --title "Refresh the vendored Tesla signal catalog" \
+            --body-file body.md \
+          || gh pr edit "$BRANCH" --repo "${{ github.repository }}" --body-file body.md
