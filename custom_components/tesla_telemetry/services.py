@@ -53,7 +53,12 @@ from .const import (
     INTERVAL_PRESET_OVERRIDES,
 )
 from .signals import resolve_effective_intervals
-from .tesla_api import TelemetryConfig, TelemetryFieldConfig, TeslaApi
+from .tesla_api import (
+    TelemetryConfig,
+    TelemetryFieldConfig,
+    TeslaApi,
+    TeslaApiError,
+)
 from .tls_ca import ca_bundle_pem
 
 _LOGGER = logging.getLogger(__name__)
@@ -63,11 +68,13 @@ SERVICE_RESYNC = "resync_telemetry_config"
 SERVICE_DUMP_PUBLIC_KEY = "dump_public_key"
 SERVICE_GET_CONFIG = "get_telemetry_config"
 SERVICE_SET_INTERVAL_PRESET = "set_interval_preset"
+SERVICE_GET_TELEMETRY_ERRORS = "get_telemetry_errors"
 
 ATTR_ENTRY_ID = "entry_id"
 ATTR_CA_PEM = "ca_pem"
 ATTR_REGISTER_PARTNER = "register_partner_domain"
 ATTR_PRESET = "preset"
+ATTR_THIS_VEHICLE_ONLY = "this_vehicle_only"
 
 _BOOTSTRAP_SCHEMA = vol.Schema(
     {
@@ -87,6 +94,15 @@ _RESYNC_SCHEMA = vol.Schema(
 _DUMP_KEY_SCHEMA = vol.Schema({vol.Optional(ATTR_ENTRY_ID): str})
 
 _GET_CONFIG_SCHEMA = vol.Schema({vol.Optional(ATTR_ENTRY_ID): str})
+
+_GET_ERRORS_SCHEMA = vol.Schema(
+    {
+        vol.Optional(ATTR_ENTRY_ID): str,
+        # The endpoint is partner-scoped, so it reports every vehicle on the
+        # domain. Default to just this entry's car; set false to see them all.
+        vol.Optional(ATTR_THIS_VEHICLE_ONLY, default=True): bool,
+    }
+)
 
 _SET_PRESET_SCHEMA = vol.Schema(
     {
@@ -289,6 +305,56 @@ async def _get_config_handler(call: ServiceCall) -> ServiceResponse:
     return {"vin": vin, "telemetry_config": response}
 
 
+async def _get_telemetry_errors_handler(call: ServiceCall) -> ServiceResponse:
+    """Query Tesla for errors vehicles reported after receiving the config.
+
+    This is the endpoint that explains a car which accepted the config and
+    then never connected — bad hostname, an untrusted certificate chain, a
+    TLS or mTLS failure. None of that is visible from Home Assistant
+    otherwise: the vehicle simply never opens the WebSocket.
+
+    Partner-scoped, so it needs the partner domain rather than a VIN and
+    returns every vehicle on the domain; filtered to this entry's VIN by
+    default.
+    """
+    hass = call.hass
+    entry = _resolve_entry(hass, call.data.get(ATTR_ENTRY_ID))
+    api = _entry_api(hass, entry)
+    vin = entry.data[CONF_VIN]
+    domain = entry.data.get(CONF_PARTNER_DOMAIN)
+    if not domain:
+        raise ServiceValidationError(
+            "this entry has no partner domain configured, which the "
+            "fleet_telemetry_errors endpoint requires"
+        )
+
+    try:
+        errors = await api.get_fleet_telemetry_errors(domain)
+    except TeslaApiError as err:
+        raise HomeAssistantError(
+            f"could not fetch telemetry errors for domain {domain}: {err}"
+        ) from err
+
+    total = len(errors)
+    if call.data.get(ATTR_THIS_VEHICLE_ONLY, True):
+        errors = [e for e in errors if e.get("vin") == vin]
+
+    _LOGGER.info(
+        "tesla_telemetry: get_telemetry_errors domain=%s vin=%s matched=%d of %d",
+        domain,
+        vin,
+        len(errors),
+        total,
+    )
+    return {
+        "vin": vin,
+        "partner_domain": domain,
+        "error_count": len(errors),
+        "total_for_domain": total,
+        "errors": errors,
+    }
+
+
 async def _set_interval_preset_handler(call: ServiceCall) -> ServiceResponse:
     """Switch the telemetry interval preset and re-push the config.
 
@@ -390,6 +456,14 @@ def async_register_services(hass: HomeAssistant) -> None:
             SERVICE_GET_CONFIG,
             _get_config_handler,
             schema=_GET_CONFIG_SCHEMA,
+            supports_response=SupportsResponse.ONLY,
+        )
+    if not hass.services.has_service(DOMAIN, SERVICE_GET_TELEMETRY_ERRORS):
+        hass.services.async_register(
+            DOMAIN,
+            SERVICE_GET_TELEMETRY_ERRORS,
+            _get_telemetry_errors_handler,
+            schema=_GET_ERRORS_SCHEMA,
             supports_response=SupportsResponse.ONLY,
         )
     if not hass.services.has_service(DOMAIN, SERVICE_SET_INTERVAL_PRESET):

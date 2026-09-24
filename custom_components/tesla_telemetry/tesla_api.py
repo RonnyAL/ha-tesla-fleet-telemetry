@@ -21,6 +21,7 @@ import asyncio
 import json as _json
 import logging
 import time
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -200,6 +201,31 @@ class TeslaApi:
         )
         return dict(data.get("response") or {})
 
+    async def get_fleet_telemetry_errors(self, domain: str) -> list[dict[str, Any]]:
+        """Recent telemetry errors vehicles reported after receiving the config.
+
+        Partner-scoped, not vehicle-scoped: the endpoint lives under
+        ``partner_accounts``, takes the partner domain rather than a VIN, and
+        needs the partner (client_credentials) token — a user token gets a 403.
+        It therefore returns errors for every vehicle on the domain; callers
+        that want one car filter by the ``vin`` field.
+
+        https://developer.tesla.com/docs/fleet-api/endpoints/partner-endpoints
+        """
+        data = await self._partner_request(
+            "GET",
+            "/api/1/partner_accounts/fleet_telemetry_errors",
+            params={"domain": domain},
+        )
+        response = data.get("response")
+        if isinstance(response, dict):
+            # Tesla has returned both a bare list and {"fleet_telemetry_errors": [...]}.
+            for key in ("fleet_telemetry_errors", "errors", "data"):
+                if isinstance(response.get(key), list):
+                    return list(response[key])
+            return []
+        return list(response or [])
+
     async def register_partner_domain(self, domain: str) -> dict[str, Any]:
         """One-shot during onboarding — call once per partner domain.
         Tesla validates the .well-known public-key URL on `domain` matches
@@ -238,16 +264,17 @@ class TeslaApi:
         path: str,
         *,
         json: Any = None,
+        params: Mapping[str, str] | None = None,
     ) -> dict[str, Any]:
         token = await self._partner_access_token()
         try:
-            return await self._raw_request(method, path, token, json)
+            return await self._raw_request(method, path, token, json, params)
         except TeslaApiError as err:
             if err.status != 401:
                 raise
             self._partner_token = None
             token = await self._partner_access_token()
-            return await self._raw_request(method, path, token, json)
+            return await self._raw_request(method, path, token, json, params)
 
     async def _raw_request(
         self,
@@ -255,11 +282,12 @@ class TeslaApi:
         path: str,
         token: str,
         json: Any,
+        params: Mapping[str, str] | None = None,
     ) -> dict[str, Any]:
         url = f"{self._base_url}{path}"
         headers = {"Authorization": f"Bearer {token}", "Accept": "application/json"}
         async with self._session.request(
-            method, url, headers=headers, json=json
+            method, url, headers=headers, json=json, params=params
         ) as resp:
             text = await resp.text()
             if resp.status >= 400:
