@@ -13,6 +13,8 @@ import sys
 from pathlib import Path
 from types import ModuleType
 
+import pytest
+
 # --- Load const.py in isolation under a synthetic package -------------------
 _PKG = "tesla_telemetry_isolated"
 _DIR = (
@@ -124,3 +126,51 @@ def test_no_token_endpoint_still_points_at_auth_tesla_com() -> None:
         assert "auth.tesla.com/oauth2/v3/token" not in url, (
             f"{name} uses the legacy token host: {url}"
         )
+
+
+# ---------------------------------------------------------------------------
+# Malformed JWT payloads
+# ---------------------------------------------------------------------------
+# `token.split(".")[1]` of an arbitrary string can base64-decode to any JSON
+# value, not just an object. These used to raise AttributeError out of
+# async_oauth_create_entry and fail the config flow *after* the user had
+# already completed Tesla's consent screen.
+@pytest.mark.parametrize(
+    "payload", [["x"], 123, "a string", None, True, 1.5, []]
+)
+def test_non_object_jwt_payloads_return_none(payload: object) -> None:
+    const = _load_isolated()
+    body = base64.urlsafe_b64encode(json.dumps(payload).encode()).rstrip(b"=").decode()
+    assert const.region_from_access_token(f"header.{body}.signature") is None
+
+
+def test_object_payload_without_ou_code_returns_none() -> None:
+    const = _load_isolated()
+    body = base64.urlsafe_b64encode(json.dumps({"sub": "x"}).encode())
+    body = body.rstrip(b"=").decode()
+    assert const.region_from_access_token(f"header.{body}.signature") is None
+
+
+# ---------------------------------------------------------------------------
+# Detected region vs. what the form offers
+# ---------------------------------------------------------------------------
+def test_cn_is_detected_but_not_selectable() -> None:
+    """A CN account must not become a SelectSelector default it has no option
+    for — the config flow clamps to SELECTABLE_REGIONS."""
+    const = _load_isolated()
+    body = base64.urlsafe_b64encode(json.dumps({"ou_code": "CN"}).encode())
+    body = body.rstrip(b"=").decode()
+    assert const.region_from_access_token(f"h.{body}.s") == const.REGION_CN
+    assert const.REGION_CN not in const.SELECTABLE_REGIONS
+
+
+def test_config_flow_clamps_detected_region_to_selectable() -> None:
+    source = (
+        Path(__file__).resolve().parents[1]
+        / "custom_components"
+        / "tesla_telemetry"
+        / "config_flow.py"
+    ).read_text(encoding="utf-8")
+    assert "if detected in SELECTABLE_REGIONS:" in source, (
+        "config_flow must only preselect a region the form offers"
+    )

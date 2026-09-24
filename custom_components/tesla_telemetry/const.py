@@ -367,6 +367,14 @@ def region_from_access_token(token: str) -> str | None:
         payload = json.loads(
             base64.urlsafe_b64decode(payload_b64 + "=" * (-len(payload_b64) % 4))
         )
+        # A JWT payload is an object, but `[1]` of an arbitrary string can
+        # decode to any JSON value. `123`, `"s"`, `["x"]` and `null` are all
+        # valid JSON and none of them has .get, which would raise
+        # AttributeError straight out of async_oauth_create_entry and fail the
+        # config flow after the user has already been through Tesla's consent
+        # screen. This is a UX default, so anything unparseable means None.
+        if not isinstance(payload, dict):
+            return None
         ou_code = str(payload.get("ou_code", "")).lower()
     except (IndexError, ValueError, TypeError, binascii.Error):
         return None

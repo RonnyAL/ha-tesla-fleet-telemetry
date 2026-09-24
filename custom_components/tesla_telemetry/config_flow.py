@@ -225,8 +225,19 @@ class TeslaTelemetryOAuth2FlowHandler(
         detected = region_from_access_token(
             data["token"].get("access_token") or ""
         )
-        if detected is not None:
+        # Only preselect a region the form actually offers. `ou_code` can say
+        # "cn", which SELECTABLE_REGIONS deliberately excludes, and a default
+        # outside a SelectSelector's own options makes the step fail
+        # validation on submit. Falling back leaves the user a working form.
+        if detected in SELECTABLE_REGIONS:
             self._region = detected
+        elif detected is not None:
+            _LOGGER.debug(
+                "tesla_telemetry: account region %r is not selectable; "
+                "defaulting to %s",
+                detected,
+                DEFAULT_REGION,
+            )
         return await self.async_step_region()
 
     # -------------------- Step: vehicle --------------------
