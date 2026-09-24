@@ -113,3 +113,50 @@ def test_region_step_is_present() -> None:
         step = _load(path)["config"]["step"]
         assert "region" in step, f"{path.name}: config.step.region is missing"
         assert step["region"].get("title"), f"{path.name}: region step has no title"
+
+
+# ---------------------------------------------------------------------------
+# Reauth surface
+# ---------------------------------------------------------------------------
+# The reauth flow is what lets an existing entry pick up a newly-added OAuth
+# scope (HA refreshes with a stored refresh_token, which carries the scopes it
+# was minted with). A missing translation here is a broken dialog, and a
+# placeholder the code does not supply is a KeyError when HA renders the step.
+def test_reauth_step_and_aborts_are_translated() -> None:
+    for path in (_STRINGS, _EN):
+        config = _load(path)["config"]
+        step = config["step"]
+        assert "reauth_confirm" in step, f"{path.name}: no reauth_confirm step"
+        assert step["reauth_confirm"].get("title")
+        assert step["reauth_confirm"].get("description")
+        for reason in ("reauth_successful", "wrong_account"):
+            assert reason in config["abort"], f"{path.name}: no '{reason}' abort"
+
+
+def test_reauth_description_placeholders_are_supplied() -> None:
+    """Every {placeholder} in the step text is passed by config_flow.py."""
+    description = _load(_STRINGS)["config"]["step"]["reauth_confirm"]["description"]
+    used = set(re.findall(r"\{([a-z_]+)\}", description))
+    assert used, "reauth_confirm description has no placeholders to check"
+
+    source = (_DIR / "config_flow.py").read_text(encoding="utf-8")
+    block = re.search(
+        r'step_id="reauth_confirm".*?description_placeholders=\{(.*?)\}',
+        source,
+        re.DOTALL,
+    )
+    assert block, "config_flow.py passes no description_placeholders for reauth_confirm"
+    supplied = set(re.findall(r'"([a-z_]+)":', block.group(1)))
+    missing = used - supplied
+    assert not missing, f"reauth_confirm uses {missing} but config_flow supplies {supplied}"
+
+
+def test_abort_reasons_used_in_code_are_translated() -> None:
+    """Every async_abort(reason=...) in the config flow has a message."""
+    source = (_DIR / "config_flow.py").read_text(encoding="utf-8")
+    used = set(re.findall(r'async_abort\(\s*reason="([a-z_]+)"', source))
+    assert used, "no async_abort reasons found in config_flow.py"
+    for path in (_STRINGS, _EN):
+        defined = set(_load(path)["config"]["abort"])
+        missing = used - defined
+        assert not missing, f"{path.name}: untranslated abort reasons {sorted(missing)}"

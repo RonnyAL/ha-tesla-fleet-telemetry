@@ -272,6 +272,15 @@ CONF_HOSTNAME = "hostname"
 CONF_PORT = "port"
 CONF_PRIVATE_KEY_PEM = "private_key_pem"
 
+# Persisted CA-bundle override. Absent (the normal case) means "use
+# DEFAULT_CA_BUNDLE_PEM". A `ca_pem:` passed to bootstrap / resync /
+# set_interval_preset is stored here so that every *later* push — the daily
+# auto-resync and the options-change re-push, neither of which takes service
+# data — keeps using it. Without this a private CA worked until the first
+# unattended push and then silently reverted, breaking the vehicle's TLS
+# trust anchor days after the change that caused it.
+CONF_CA_PEM = "ca_pem"
+
 # WebSocket endpoint registered on HA's HTTP server. nginx proxies the
 # vehicle's mTLS WSS connection here after validating the client cert.
 WS_PATH = "/api/tesla_telemetry/ws"
@@ -281,13 +290,28 @@ HEADER_PROXY_SECRET = "X-Tesla-Proxy-Secret"
 HEADER_VERIFIED_VIN = "X-Tesla-Verified-Vin"
 
 # --- Tesla Fleet API endpoints ---------------------------------------
-# User OAuth refresh (refresh_token grant). Region-agnostic.
-TESLA_USER_TOKEN_URL = "https://auth.tesla.com/oauth2/v3/token"
+# User OAuth token exchange (authorization_code + refresh_token grants).
+# Region-agnostic.
+#
+# This must be the fleet-auth host, not auth.tesla.com. Tesla's third-party
+# token docs state: "calls to /token must use the
+# fleet-auth.prd.vn.cloud.tesla.com domain as these calls can come from
+# application servers and require different rate limits", and the 2025-07-21
+# announcement ("Use fleet-auth.prd.vn.cloud.tesla.com domain for token
+# exchange") warns that "beginning August 2025 the auth.tesla.com domain will
+# have modifications that may make token generation unreliable".
+#
+# Note the OpenID discovery document at
+# fleet-auth.prd.vn.cloud.tesla.com/oauth2/v3/thirdparty/.well-known/openid-configuration
+# still advertises token_endpoint = https://auth.tesla.com/oauth2/v3/token.
+# It contradicts the prose docs and the announcement; don't "fix" this back
+# from that document.
+TESLA_USER_TOKEN_URL = "https://fleet-auth.prd.vn.cloud.tesla.com/oauth2/v3/token"
 
-# OAuth2 endpoints exposed via application_credentials. The token endpoint
-# is the same URL we used for refresh_token grants — Tesla's auth server
-# handles both `authorization_code` (fresh login) and `refresh_token`
-# grants on the one URL.
+# OAuth2 endpoints exposed via application_credentials. Only /token moved:
+# /authorize stays on auth.tesla.com, since it is the browser-facing consent
+# screen rather than a server-to-server call. Both the discovery document and
+# the third-party token docs agree on it.
 OAUTH_AUTHORIZE_URL = "https://auth.tesla.com/oauth2/v3/authorize"
 OAUTH_TOKEN_URL = TESLA_USER_TOKEN_URL
 OAUTH_SCOPES = ["openid", "offline_access", "vehicle_device_data", "vehicle_location"]
@@ -343,6 +367,14 @@ def region_from_access_token(token: str) -> str | None:
         payload = json.loads(
             base64.urlsafe_b64decode(payload_b64 + "=" * (-len(payload_b64) % 4))
         )
+        # A JWT payload is an object, but `[1]` of an arbitrary string can
+        # decode to any JSON value. `123`, `"s"`, `["x"]` and `null` are all
+        # valid JSON and none of them has .get, which would raise
+        # AttributeError straight out of async_oauth_create_entry and fail the
+        # config flow after the user has already been through Tesla's consent
+        # screen. This is a UX default, so anything unparseable means None.
+        if not isinstance(payload, dict):
+            return None
         ou_code = str(payload.get("ou_code", "")).lower()
     except (IndexError, ValueError, TypeError, binascii.Error):
         return None
@@ -357,5 +389,14 @@ TOKEN_REFRESH_LEEWAY = 60
 # 7 days old. Survives HA restarts because `last_sync_at` lives in
 # entry.data.
 CONF_LAST_SYNC_AT = "last_sync_at"
+
+# Fingerprint of the field config that was last successfully pushed to the
+# vehicle. Persisted so restarts do not have to *assume* what the car holds.
+# Without it an integration update that changes DEFAULT_INTERVALS_SECONDS left
+# the car on the old config: setup seeded its "already pushed" marker from the
+# freshly resolved config, so the two always compared equal, the options-change
+# listener short-circuited, and the newly defaulted signals were not requested
+# until the >7-day auto-resync happened to fire.
+CONF_LAST_SYNC_FIELDS_HASH = "last_sync_fields_hash"
 AUTO_RESYNC_CHECK_INTERVAL_SECONDS = 24 * 3600
 AUTO_RESYNC_MAX_AGE_SECONDS = 7 * 24 * 3600

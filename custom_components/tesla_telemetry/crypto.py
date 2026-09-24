@@ -149,7 +149,10 @@ def _load_partner_private_scalar(pem: str) -> tuple[int, bytes]:
     """Parse a partner private-key PEM. Returns (scalar_int, pub_uncompressed_bytes)."""
     key = serialization.load_pem_private_key(pem.encode(), password=None)
     if not isinstance(key, ec.EllipticCurvePrivateKey):
-        raise ValueError("partner key is not an EC private key")
+        # ValueError, not the TypeError ruff's TRY004 suggests: `pem` is a str
+        # as declared, and it is its *content* that is wrong — the same class
+        # of problem as the curve check below, which callers catch together.
+        raise ValueError("partner key is not an EC private key")  # noqa: TRY004
     if key.curve.name != "secp256r1":
         raise ValueError(
             f"partner key must be on secp256r1 (P-256); got {key.curve.name}"

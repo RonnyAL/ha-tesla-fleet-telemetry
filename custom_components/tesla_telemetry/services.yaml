@@ -29,7 +29,9 @@ bootstrap:
       description: >
         Override the default Let's Encrypt root bundle used as the
         vehicle's TLS trust anchor. Only set this if your hostname uses
-        a non-LE CA.
+        a non-LE CA. The value is remembered on the config entry and
+        reused by the daily auto-resync and by option changes; pass an
+        empty value to clear it and go back to the default bundle.
       required: false
       selector:
         text:
@@ -69,6 +71,33 @@ get_telemetry_config:
       selector:
         config_entry:
           integration: tesla_telemetry
+
+get_telemetry_errors:
+  name: Show recent telemetry errors
+  description: >
+    Calls Tesla's `GET /api/1/partner_accounts/fleet_telemetry_errors` and
+    returns the response. This is what explains a vehicle that accepted the
+    config and then never connected — a wrong hostname, an untrusted
+    certificate chain, or a TLS/mTLS failure. None of that is visible from
+    Home Assistant otherwise, because the car simply never opens the
+    WebSocket. The endpoint is scoped to the partner domain, not to one car,
+    so it needs a partner token and reports every vehicle on the domain.
+  fields:
+    entry_id:
+      name: Config entry
+      required: false
+      selector:
+        config_entry:
+          integration: tesla_telemetry
+    this_vehicle_only:
+      name: This vehicle only
+      description: >
+        Filter the response to this entry's VIN. Turn off to see errors for
+        every vehicle registered to the same partner domain.
+      required: false
+      default: true
+      selector:
+        boolean:
 
 dump_public_key:
   name: Show partner public key

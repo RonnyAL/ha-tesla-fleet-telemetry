@@ -160,7 +160,19 @@ def _enum_prefix(enum_type: Any) -> str:
     return cached
 
 
-def value_as_short_enum(value: Any) -> str | None:
+def value_as_short_enum(value: Any, *, keep_unknown: bool = False) -> str | None:
+    """Enum arm as a snake_case name with the enum's common prefix stripped.
+
+    ``None`` means "no usable value": an invalid sample, no oneof arm set, or
+    an enum number the vendored proto does not know.
+
+    By default an enum that explicitly reports Unknown/SNA also collapses to
+    ``None``, which is right for a sensor — there is nothing to display. It is
+    wrong for a binary sensor deriving on/off, where "the car told us it is in
+    the Unknown state" is a real answer and distinct from "we could not read
+    the sample at all". Those pass ``keep_unknown=True`` and decide for
+    themselves.
+    """
     if value.HasField("invalid"):
         return None
     arm = value.WhichOneof("value")
@@ -173,7 +185,7 @@ def value_as_short_enum(value: Any) -> str | None:
         if ev is None:
             return None
         short = ev.name[len(_enum_prefix(field.enum_type)):] or ev.name
-        if short.lower() in ("unknown", "sna"):
+        if short.lower() in ("unknown", "sna") and not keep_unknown:
             return None
         return _CAMEL.sub("_", short).lower()
     if isinstance(raw, str):
@@ -210,10 +222,18 @@ def value_as_clock_time(value: Any) -> str | None:
 
 
 def _hvac_running(value: Any) -> bool | None:
-    state = value_as_short_enum(value)
+    """HVAC is "on" for any state other than Off/Unknown.
+
+    Matches the HvacPowerBinarySensor this restores: it read
+    ``name not in ("HvacPowerStateOff", "HvacPowerStateUnknown")``, so an
+    explicit Unknown reported *off*. Returning None there instead would leave
+    `binary_sensor.<vehicle>_climate` at `unknown`, and any automation or
+    dashboard condition testing for `off` would never fire.
+    """
+    state = value_as_short_enum(value, keep_unknown=True)
     if state is None:
         return None
-    return state != "off"
+    return state not in ("off", "unknown", "sna")
 
 
 def _number_or_enum(value: Any) -> Any:
@@ -225,13 +245,22 @@ def _number_or_enum(value: Any) -> Any:
 
 
 def _sentry_armed(value: Any) -> bool | None:
+    """Armed when the enum reports Armed/Aware/Panic.
+
+    Matches the SentryArmedBinarySensor this restores, whose docstring is
+    explicit: "Idle/Off/Unknown are reported as off so the dashboard chip
+    lights up only when the car is actively watching its surroundings." It
+    also fell back to a plain bool, which older firmware sends instead of the
+    enum.
+    """
     from .values import value_as_bool
 
     if value.WhichOneof("value") == "boolean_value":
         return value_as_bool(value)
-    state = value_as_short_enum(value)
+    state = value_as_short_enum(value, keep_unknown=True)
     if state is None:
-        return None
+        # Not an enum we recognise — older firmware may still have sent a bool.
+        return value_as_bool(value)
     return state in ("armed", "aware", "panic")
 
 

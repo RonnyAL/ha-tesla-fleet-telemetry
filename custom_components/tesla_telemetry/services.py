@@ -17,13 +17,15 @@ auto-resolves when there's exactly one entry configured):
 """
 from __future__ import annotations
 
+import hashlib
+import json
 import logging
 import time
+from collections.abc import Mapping
 from datetime import datetime, timedelta
 from typing import Any
 
 import voluptuous as vol
-
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import (
     HomeAssistant,
@@ -38,9 +40,11 @@ from homeassistant.helpers.event import async_track_time_interval
 from .const import (
     AUTO_RESYNC_CHECK_INTERVAL_SECONDS,
     AUTO_RESYNC_MAX_AGE_SECONDS,
+    CONF_CA_PEM,
     CONF_HOSTNAME,
     CONF_INTERVAL_PRESET,
     CONF_LAST_SYNC_AT,
+    CONF_LAST_SYNC_FIELDS_HASH,
     CONF_PARTNER_DOMAIN,
     CONF_PORT,
     CONF_PRIVATE_KEY_PEM,
@@ -49,8 +53,13 @@ from .const import (
     INTERVAL_PRESET_OVERRIDES,
 )
 from .signals import resolve_effective_intervals
-from .tesla_api import TelemetryConfig, TelemetryFieldConfig, TeslaApi
-from .tls_ca import DEFAULT_CA_BUNDLE_PEM
+from .tesla_api import (
+    TelemetryConfig,
+    TelemetryFieldConfig,
+    TeslaApi,
+    TeslaApiError,
+)
+from .tls_ca import ca_bundle_pem
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -59,11 +68,13 @@ SERVICE_RESYNC = "resync_telemetry_config"
 SERVICE_DUMP_PUBLIC_KEY = "dump_public_key"
 SERVICE_GET_CONFIG = "get_telemetry_config"
 SERVICE_SET_INTERVAL_PRESET = "set_interval_preset"
+SERVICE_GET_TELEMETRY_ERRORS = "get_telemetry_errors"
 
 ATTR_ENTRY_ID = "entry_id"
 ATTR_CA_PEM = "ca_pem"
 ATTR_REGISTER_PARTNER = "register_partner_domain"
 ATTR_PRESET = "preset"
+ATTR_THIS_VEHICLE_ONLY = "this_vehicle_only"
 
 _BOOTSTRAP_SCHEMA = vol.Schema(
     {
@@ -83,6 +94,15 @@ _RESYNC_SCHEMA = vol.Schema(
 _DUMP_KEY_SCHEMA = vol.Schema({vol.Optional(ATTR_ENTRY_ID): str})
 
 _GET_CONFIG_SCHEMA = vol.Schema({vol.Optional(ATTR_ENTRY_ID): str})
+
+_GET_ERRORS_SCHEMA = vol.Schema(
+    {
+        vol.Optional(ATTR_ENTRY_ID): str,
+        # The endpoint is partner-scoped, so it reports every vehicle on the
+        # domain. Default to just this entry's car; set false to see them all.
+        vol.Optional(ATTR_THIS_VEHICLE_ONLY, default=True): bool,
+    }
+)
 
 _SET_PRESET_SCHEMA = vol.Schema(
     {
@@ -132,6 +152,43 @@ def _resolve_intervals(entry: ConfigEntry) -> dict[str, int]:
     return resolve_effective_intervals(entry)
 
 
+def _resolve_ca_pem(
+    hass: HomeAssistant, entry: ConfigEntry, call_data: Mapping[str, Any]
+) -> str:
+    """Resolve the CA bundle for a push, persisting an explicit override.
+
+    A `ca_pem:` on the service call is stored on the entry, because the pushes
+    that happen *without* service data — the daily auto-resync and the
+    options-change re-push — would otherwise fall back to
+    DEFAULT_CA_BUNDLE_PEM and silently swap the vehicle's trust anchor back
+    days later.
+
+    Passing an empty `ca_pem:` clears a stored override and returns to the
+    default bundle; omitting the key entirely leaves whatever is stored.
+    """
+    if ATTR_CA_PEM in call_data:
+        override = (call_data.get(ATTR_CA_PEM) or "").strip()
+        if override != (entry.data.get(CONF_CA_PEM) or ""):
+            data = {**entry.data}
+            if override:
+                data[CONF_CA_PEM] = override
+            else:
+                data.pop(CONF_CA_PEM, None)
+            hass.config_entries.async_update_entry(entry, data=data)
+            _LOGGER.info(
+                "tesla_telemetry: %s CA bundle override for vin=%s",
+                "stored" if override else "cleared",
+                entry.data.get(CONF_VIN),
+            )
+        return ca_bundle_pem(override)
+    return entry_ca_pem(entry)
+
+
+def entry_ca_pem(entry: ConfigEntry) -> str:
+    """The CA bundle this entry should push, honouring a stored override."""
+    return ca_bundle_pem(entry.data.get(CONF_CA_PEM))
+
+
 def _build_telemetry_config(entry: ConfigEntry, ca_pem: str) -> TelemetryConfig:
     return TelemetryConfig(
         hostname=entry.data[CONF_HOSTNAME],
@@ -144,10 +201,37 @@ def _build_telemetry_config(entry: ConfigEntry, ca_pem: str) -> TelemetryConfig:
     )
 
 
-def _stamp_last_sync(hass: HomeAssistant, entry: ConfigEntry) -> None:
-    """Record the unix timestamp of a successful telemetry config push.
-    Survives restarts so auto-resync can decide whether to fire."""
+def _fields_fingerprint(intervals: Mapping[str, int]) -> str:
+    """Stable digest of a resolved field config.
+
+    Stored rather than the whole 80-entry mapping: all anyone needs is an
+    equality test against what the car was last told, and a digest keeps the
+    config entry small.
+
+    Serialised as JSON rather than joined with separators, so that no field
+    name can be confused with the delimiters and produce a collision. Tesla's
+    Field enum never contains one today, but a digest that silently treats two
+    different configs as equal would present as "the car was never updated".
+    """
+    payload = json.dumps(sorted(intervals.items()), separators=(",", ":"))
+    return hashlib.sha256(payload.encode()).hexdigest()
+
+
+def _stamp_last_sync(
+    hass: HomeAssistant,
+    entry: ConfigEntry,
+    intervals: Mapping[str, int] | None = None,
+) -> None:
+    """Record a successful telemetry config push: when, and what.
+
+    The timestamp drives the >7-day auto-resync. The fingerprint is what lets
+    a later run tell whether the car is still holding the config we think it
+    is — an integration update that adds default signals changes it, so the
+    next resync tick pushes instead of waiting for the age to expire.
+    """
     new_data = {**entry.data, CONF_LAST_SYNC_AT: int(time.time())}
+    if intervals is not None:
+        new_data[CONF_LAST_SYNC_FIELDS_HASH] = _fields_fingerprint(intervals)
     hass.config_entries.async_update_entry(entry, data=new_data)
 
 
@@ -174,12 +258,12 @@ async def _bootstrap_handler(call: ServiceCall) -> ServiceResponse:
             )
             response["partner_register_error"] = str(err)
 
-    ca_pem = (call.data.get(ATTR_CA_PEM) or DEFAULT_CA_BUNDLE_PEM).strip() + "\n"
+    ca_pem = _resolve_ca_pem(hass, entry, call.data)
     cfg = _build_telemetry_config(entry, ca_pem)
     response["telemetry_config"] = await api.set_fleet_telemetry_config(
         entry.data[CONF_VIN], cfg
     )
-    _stamp_last_sync(hass, entry)
+    _stamp_last_sync(hass, entry, _resolve_intervals(entry))
     _LOGGER.info(
         "tesla_telemetry: bootstrap completed for vin=%s — %s",
         entry.data[CONF_VIN],
@@ -192,10 +276,10 @@ async def _resync_handler(call: ServiceCall) -> ServiceResponse:
     hass = call.hass
     entry = _resolve_entry(hass, call.data.get(ATTR_ENTRY_ID))
     api = _entry_api(hass, entry)
-    ca_pem = (call.data.get(ATTR_CA_PEM) or DEFAULT_CA_BUNDLE_PEM).strip() + "\n"
+    ca_pem = _resolve_ca_pem(hass, entry, call.data)
     cfg = _build_telemetry_config(entry, ca_pem)
     response = await api.set_fleet_telemetry_config(entry.data[CONF_VIN], cfg)
-    _stamp_last_sync(hass, entry)
+    _stamp_last_sync(hass, entry, _resolve_intervals(entry))
     _LOGGER.info(
         "tesla_telemetry: resync completed for vin=%s — %s",
         entry.data[CONF_VIN],
@@ -221,6 +305,56 @@ async def _get_config_handler(call: ServiceCall) -> ServiceResponse:
     return {"vin": vin, "telemetry_config": response}
 
 
+async def _get_telemetry_errors_handler(call: ServiceCall) -> ServiceResponse:
+    """Query Tesla for errors vehicles reported after receiving the config.
+
+    This is the endpoint that explains a car which accepted the config and
+    then never connected — bad hostname, an untrusted certificate chain, a
+    TLS or mTLS failure. None of that is visible from Home Assistant
+    otherwise: the vehicle simply never opens the WebSocket.
+
+    Partner-scoped, so it needs the partner domain rather than a VIN and
+    returns every vehicle on the domain; filtered to this entry's VIN by
+    default.
+    """
+    hass = call.hass
+    entry = _resolve_entry(hass, call.data.get(ATTR_ENTRY_ID))
+    api = _entry_api(hass, entry)
+    vin = entry.data[CONF_VIN]
+    domain = entry.data.get(CONF_PARTNER_DOMAIN)
+    if not domain:
+        raise ServiceValidationError(
+            "this entry has no partner domain configured, which the "
+            "fleet_telemetry_errors endpoint requires"
+        )
+
+    try:
+        errors = await api.get_fleet_telemetry_errors(domain)
+    except TeslaApiError as err:
+        raise HomeAssistantError(
+            f"could not fetch telemetry errors for domain {domain}: {err}"
+        ) from err
+
+    total = len(errors)
+    if call.data.get(ATTR_THIS_VEHICLE_ONLY, True):
+        errors = [e for e in errors if e.get("vin") == vin]
+
+    _LOGGER.info(
+        "tesla_telemetry: get_telemetry_errors domain=%s vin=%s matched=%d of %d",
+        domain,
+        vin,
+        len(errors),
+        total,
+    )
+    return {
+        "vin": vin,
+        "partner_domain": domain,
+        "error_count": len(errors),
+        "total_for_domain": total,
+        "errors": errors,
+    }
+
+
 async def _set_interval_preset_handler(call: ServiceCall) -> ServiceResponse:
     """Switch the telemetry interval preset and re-push the config.
 
@@ -238,10 +372,10 @@ async def _set_interval_preset_handler(call: ServiceCall) -> ServiceResponse:
     entry = hass.config_entries.async_get_entry(entry.entry_id)  # type: ignore[assignment]
     assert entry is not None
 
-    ca_pem = (call.data.get(ATTR_CA_PEM) or DEFAULT_CA_BUNDLE_PEM).strip() + "\n"
+    ca_pem = _resolve_ca_pem(hass, entry, call.data)
     cfg = _build_telemetry_config(entry, ca_pem)
     response = await api.set_fleet_telemetry_config(entry.data[CONF_VIN], cfg)
-    _stamp_last_sync(hass, entry)
+    _stamp_last_sync(hass, entry, _resolve_intervals(entry))
     intervals = _resolve_intervals(entry)
     _LOGGER.info(
         "tesla_telemetry: interval preset=%s applied for vin=%s — %s",
@@ -268,7 +402,7 @@ async def _dump_public_key_handler(call: ServiceCall) -> ServiceResponse:
 
     try:
         key = serialization.load_pem_private_key(pem.encode(), password=None)
-    except Exception as err:  # noqa: BLE001
+    except Exception as err:
         raise HomeAssistantError(f"could not parse private key: {err}") from err
 
     pub_pem = (
@@ -324,6 +458,14 @@ def async_register_services(hass: HomeAssistant) -> None:
             schema=_GET_CONFIG_SCHEMA,
             supports_response=SupportsResponse.ONLY,
         )
+    if not hass.services.has_service(DOMAIN, SERVICE_GET_TELEMETRY_ERRORS):
+        hass.services.async_register(
+            DOMAIN,
+            SERVICE_GET_TELEMETRY_ERRORS,
+            _get_telemetry_errors_handler,
+            schema=_GET_ERRORS_SCHEMA,
+            supports_response=SupportsResponse.ONLY,
+        )
     if not hass.services.has_service(DOMAIN, SERVICE_SET_INTERVAL_PRESET):
         hass.services.async_register(
             DOMAIN,
@@ -338,22 +480,39 @@ def async_register_services(hass: HomeAssistant) -> None:
 # Auto-resync
 # ---------------------------------------------------------------------
 async def _auto_resync_if_due(hass: HomeAssistant, entry: ConfigEntry) -> None:
-    """Re-push fleet_telemetry_config when the last successful sync is
-    older than ``AUTO_RESYNC_MAX_AGE_SECONDS``. Skips silently if the
-    user hasn't bootstrapped yet (no ``last_sync_at`` recorded) — we
-    don't push a config they haven't authorized."""
+    """Re-push fleet_telemetry_config when it is stale.
+
+    Stale means either the last successful sync is older than
+    ``AUTO_RESYNC_MAX_AGE_SECONDS``, or the resolved field config no longer
+    matches what we last pushed — which is what happens when an integration
+    update changes the default signal set. Without the second condition those
+    new signals were not requested from the vehicle until the age check
+    happened to expire, so their entities sat at ``unknown`` for up to a week
+    with nothing explaining why.
+
+    Skips silently if the user hasn't bootstrapped yet (no ``last_sync_at``
+    recorded) — we don't push a config they haven't authorized.
+    """
     last = entry.data.get(CONF_LAST_SYNC_AT)
     if not last:
         return
     age = time.time() - last
-    if age < AUTO_RESYNC_MAX_AGE_SECONDS:
+    intervals = _resolve_intervals(entry)
+    stored_hash = entry.data.get(CONF_LAST_SYNC_FIELDS_HASH)
+    # An entry stamped before this key existed has no fingerprint. Treat that
+    # as "unknown, not stale" and let the age check drive it, rather than
+    # pushing for every such entry on the next tick after an update.
+    fields_changed = (
+        stored_hash is not None and stored_hash != _fields_fingerprint(intervals)
+    )
+    if age < AUTO_RESYNC_MAX_AGE_SECONDS and not fields_changed:
         return
     try:
         api = _entry_api(hass, entry)
     except HomeAssistantError as err:
         _LOGGER.debug("tesla_telemetry: auto-resync skipped — %s", err)
         return
-    cfg = _build_telemetry_config(entry, DEFAULT_CA_BUNDLE_PEM.strip() + "\n")
+    cfg = _build_telemetry_config(entry, entry_ca_pem(entry))
     try:
         result = await api.set_fleet_telemetry_config(entry.data[CONF_VIN], cfg)
     except Exception as err:  # noqa: BLE001 — never surface from a timer tick
@@ -364,11 +523,13 @@ async def _auto_resync_if_due(hass: HomeAssistant, entry: ConfigEntry) -> None:
             err,
         )
         return
-    _stamp_last_sync(hass, entry)
+    _stamp_last_sync(hass, entry, intervals)
     _LOGGER.info(
-        "tesla_telemetry: auto-resync ok for vin=%s after %ds: %s",
+        "tesla_telemetry: auto-resync ok for vin=%s after %ds (%s, %d fields): %s",
         entry.data[CONF_VIN],
         int(age),
+        "field config changed" if fields_changed else "age",
+        len(intervals),
         result,
     )
 

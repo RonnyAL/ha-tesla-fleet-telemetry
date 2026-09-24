@@ -214,6 +214,17 @@ jjxDah2nGN59PRbxYvnKkKj9
 -----END CERTIFICATE-----
 """
 
-# Combined default bundle. Three roots covering Let's Encrypt and the
-# USERTrust/Sectigo/ZeroSSL family.
+# Combined default bundle: 7 certificates covering Let's Encrypt and the
+# USERTrust/Sectigo/ZeroSSL family — ISRG Root X1 and X2, the self-signed
+# Root YE and Root YR plus their X2/X1 cross-signs, and USERTrust RSA.
 DEFAULT_CA_BUNDLE_PEM: str = _LE_ROOTS_PEM + USERTRUST_RSA_PEM
+
+
+def ca_bundle_pem(override: str | None) -> str:
+    """The CA bundle to push, given an override that may be unset.
+
+    ``None``, empty or whitespace-only means "no override" and yields the
+    default bundle. The result is always stripped and newline-terminated,
+    which is the shape Tesla's ``fleet_telemetry_config`` expects for ``ca``.
+    """
+    return ((override or "").strip() or DEFAULT_CA_BUNDLE_PEM.strip()) + "\n"

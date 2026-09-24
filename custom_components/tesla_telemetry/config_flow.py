@@ -21,18 +21,24 @@ Uses HA's standard OAuth2 framework via ``application_credentials``:
 Each integration goes through OAuth independently and gets its own
 refresh-token chain from Tesla — no more rotation race with tesla_fleet.
 One config entry is created per vehicle (VIN), each its own HA device.
+
+``reauth_confirm`` re-runs steps 1-2 only, for an entry that already
+exists: the new token is swapped in and the VIN, region and endpoint are
+kept. HA starts it whenever setup raises ``ConfigEntryAuthFailed``, and it
+is also the only way an existing entry picks up a newly added OAuth scope,
+since a refresh_token carries the scopes it was originally minted with.
 """
 from __future__ import annotations
 
-import asyncio
 import logging
 import secrets
+from collections.abc import Mapping
 from typing import Any
 
 import aiohttp
 import voluptuous as vol
-
 from homeassistant.config_entries import (
+    SOURCE_REAUTH,
     ConfigEntry,
     ConfigFlowResult,
     OptionsFlow,
@@ -89,7 +95,7 @@ class TeslaTelemetryOAuth2FlowHandler(
     @callback
     def async_get_options_flow(
         config_entry: ConfigEntry,
-    ) -> "TeslaTelemetryOptionsFlow":
+    ) -> TeslaTelemetryOptionsFlow:
         return TeslaTelemetryOptionsFlow()
 
     async def async_step_user(
@@ -99,6 +105,76 @@ class TeslaTelemetryOAuth2FlowHandler(
         request is region-independent, and the access token's ``ou_code``
         claim then preselects the region for confirmation."""
         return await self.async_step_pick_implementation()
+
+    # -------------------- Reauth --------------------
+    async def async_step_reauth(
+        self, entry_data: Mapping[str, Any]
+    ) -> ConfigFlowResult:
+        """Re-run OAuth for an existing entry, keeping its VIN and endpoint.
+
+        Two things need this. A refresh token can stop working (revoked in
+        the Tesla account, or the chain broken), which surfaces as a 401 at
+        setup. And a *scope* change only reaches an entry through a fresh
+        authorize: HA refreshes with the stored refresh_token, which carries
+        the scopes granted when it was first minted, so adding a scope to
+        OAUTH_SCOPES does nothing for entries created before it. Without this
+        step the only remedy was deleting and re-adding the entry, which
+        orphans the vehicle's entity history.
+        """
+        return await self.async_step_reauth_confirm()
+
+    async def async_step_reauth_confirm(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Confirm before bouncing the user to Tesla again."""
+        if user_input is None:
+            entry = self._get_reauth_entry()
+            return self.async_show_form(
+                step_id="reauth_confirm",
+                description_placeholders={
+                    "vehicle": entry.data.get(CONF_VEHICLE_NAME) or "",
+                    "vin": entry.data.get(CONF_VIN) or "",
+                },
+            )
+        return await self.async_step_user()
+
+    async def _async_reauth_update_entry(
+        self, data: dict[str, Any]
+    ) -> ConfigFlowResult:
+        """Swap the freshly minted token into the existing entry.
+
+        Only ``auth_implementation`` and ``token`` change; the VIN, region and
+        endpoint settings are kept, so entity unique_ids (and their history)
+        survive. The VIN is re-checked against the account that just
+        authorized, so pointing an entry at a different Tesla account fails
+        loudly here instead of silently 404-ing on every later API call.
+        """
+        entry = self._get_reauth_entry()
+        vin = entry.data.get(CONF_VIN)
+        region = entry.data.get(CONF_REGION, DEFAULT_REGION)
+        session = aiohttp_client.async_get_clientsession(self.hass)
+        try:
+            vehicles = await list_vehicles_with_token(
+                session, data["token"]["access_token"], region
+            )
+        except TeslaAuthError as err:
+            _LOGGER.warning(
+                "tesla_telemetry: reauth list_vehicles auth_failed status=%s body=%s",
+                err.status,
+                err.body,
+            )
+            return self.async_abort(reason="oauth_unauthorized")
+        except (TimeoutError, TeslaApiError, aiohttp.ClientError) as err:
+            _LOGGER.warning("tesla_telemetry: reauth list_vehicles failed: %s", err)
+            return self.async_abort(reason="cannot_connect")
+
+        if not any(v.get("vin") == vin for v in vehicles):
+            _LOGGER.warning(
+                "tesla_telemetry: reauth account does not list vin=%s", vin
+            )
+            return self.async_abort(reason="wrong_account")
+
+        return self.async_update_reload_and_abort(entry, data_updates=data)
 
     async def async_step_region(
         self, user_input: dict[str, Any] | None = None
@@ -141,12 +217,27 @@ class TeslaTelemetryOAuth2FlowHandler(
         Stash the token, preselect the region from the ``ou_code`` claim,
         and continue to integration-specific steps before actually
         creating the entry."""
+        if self.source == SOURCE_REAUTH:
+            # Reauth reuses the same OAuth steps but must update the existing
+            # entry rather than build a new one.
+            return await self._async_reauth_update_entry(data)
         self._oauth_data = data
         detected = region_from_access_token(
             data["token"].get("access_token") or ""
         )
-        if detected is not None:
+        # Only preselect a region the form actually offers. `ou_code` can say
+        # "cn", which SELECTABLE_REGIONS deliberately excludes, and a default
+        # outside a SelectSelector's own options makes the step fail
+        # validation on submit. Falling back leaves the user a working form.
+        if detected in SELECTABLE_REGIONS:
             self._region = detected
+        elif detected is not None:
+            _LOGGER.debug(
+                "tesla_telemetry: account region %r is not selectable; "
+                "defaulting to %s",
+                detected,
+                DEFAULT_REGION,
+            )
         return await self.async_step_region()
 
     # -------------------- Step: vehicle --------------------
@@ -170,7 +261,7 @@ class TeslaTelemetryOAuth2FlowHandler(
                     err.body,
                 )
                 return self.async_abort(reason="oauth_unauthorized")
-            except (TeslaApiError, aiohttp.ClientError, asyncio.TimeoutError) as err:
+            except (TimeoutError, TeslaApiError, aiohttp.ClientError) as err:
                 _LOGGER.warning("tesla_telemetry: list_vehicles failed: %s", err)
                 return self.async_abort(reason="cannot_connect")
             if not self._vehicles:
