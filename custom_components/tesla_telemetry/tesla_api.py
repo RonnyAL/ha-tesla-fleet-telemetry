@@ -25,7 +25,6 @@ from dataclasses import dataclass, field
 from typing import Any
 
 import aiohttp
-
 from homeassistant.helpers.config_entry_oauth2_flow import OAuth2Session
 
 from .const import (

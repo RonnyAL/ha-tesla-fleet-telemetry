@@ -23,7 +23,6 @@ from datetime import datetime, timedelta
 from typing import Any
 
 import voluptuous as vol
-
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import (
     HomeAssistant,
@@ -268,7 +267,7 @@ async def _dump_public_key_handler(call: ServiceCall) -> ServiceResponse:
 
     try:
         key = serialization.load_pem_private_key(pem.encode(), password=None)
-    except Exception as err:  # noqa: BLE001
+    except Exception as err:
         raise HomeAssistantError(f"could not parse private key: {err}") from err
 
     pub_pem = (

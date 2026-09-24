@@ -24,14 +24,12 @@ One config entry is created per vehicle (VIN), each its own HA device.
 """
 from __future__ import annotations
 
-import asyncio
 import logging
 import secrets
 from typing import Any
 
 import aiohttp
 import voluptuous as vol
-
 from homeassistant.config_entries import (
     ConfigEntry,
     ConfigFlowResult,
@@ -89,7 +87,7 @@ class TeslaTelemetryOAuth2FlowHandler(
     @callback
     def async_get_options_flow(
         config_entry: ConfigEntry,
-    ) -> "TeslaTelemetryOptionsFlow":
+    ) -> TeslaTelemetryOptionsFlow:
         return TeslaTelemetryOptionsFlow()
 
     async def async_step_user(
@@ -170,7 +168,7 @@ class TeslaTelemetryOAuth2FlowHandler(
                     err.body,
                 )
                 return self.async_abort(reason="oauth_unauthorized")
-            except (TeslaApiError, aiohttp.ClientError, asyncio.TimeoutError) as err:
+            except (TimeoutError, TeslaApiError, aiohttp.ClientError) as err:
                 _LOGGER.warning("tesla_telemetry: list_vehicles failed: %s", err)
                 return self.async_abort(reason="cannot_connect")
             if not self._vehicles:
