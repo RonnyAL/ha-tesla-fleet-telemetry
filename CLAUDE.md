@@ -11,17 +11,20 @@ Goal of the fork: fix the bugs we hit, then let users stream **any** signal from
 Tesla's catalog with sensible defaults and full control from the UI — without
 hand-written entity code per signal.
 
-## Owner's environment (the primary target)
+## Target environment (the primary target)
 
 - Home Assistant OS, installed via HACS custom repository (this fork).
-- **EU** Tesla account. Two cars: 2021 Model 3, 2026 Model Y (Juniper).
-- Nginx Proxy Manager terminates mTLS on shared port 443 (`ssl_verify_client`,
+- An **EU**-region Tesla account, so region selection has to work — not just NA.
+- Two vehicles of different generations (one pre-Juniper, one Juniper), so both
+  the older and the newer signal/firmware sets have to be supported. Signals
+  gated on recent firmware must not be assumed present.
+- A reverse proxy terminates mTLS on a shared port 443 (`ssl_verify_client`,
   Tesla `prod_ca.crt`) and forwards the car's request for `/` to
   `/api/tesla_telemetry/ws` with the proxy-secret and verified-VIN headers.
 - Core HA `tesla_fleet` integration stays in place for **commands** (polling
   disabled). This integration is read-only. Same Tesla developer app and
   partner key for both.
-- The owner prefers event-driven designs over polling.
+- Prefer event-driven designs over polling.
 
 ## Ground rules
 
