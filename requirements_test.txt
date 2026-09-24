@@ -1,2 +1,13 @@
-pytest>=8
+# The integration's own runtime requirements, mirrored from manifest.json.
+# Without protobuf, tests/test_signals.py::test_all_catalog_signals_from_proto
+# silently importorskip-s past itself — and that is the only check that the
+# curated signal names actually exist in the vendored Field enum.
 cryptography>=42
+protobuf>=4.25,<8
+flatbuffers>=24
+
+# Home Assistant test harness, for the tests that need a real hass instance
+# (config flow, reauth). It pins homeassistant and pytest themselves, so
+# neither is listed separately here. Note it currently requires Python 3.14 —
+# keep .github/workflows/test.yml in step with it.
+pytest-homeassistant-custom-component>=0.13.366
