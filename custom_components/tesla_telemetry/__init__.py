@@ -12,6 +12,7 @@ from homeassistant.helpers import aiohttp_client, config_entry_oauth2_flow
 
 from .const import (
     CONF_LAST_SYNC_AT,
+    CONF_LAST_SYNC_FIELDS_HASH,
     CONF_PRIVATE_KEY_PEM,
     CONF_PROXY_SECRET,
     CONF_REGION,
@@ -22,7 +23,11 @@ from .const import (
 )
 from .coordinator import TeslaTelemetryCoordinator
 from .receiver import TeslaTelemetryView
-from .services import async_register_services, async_schedule_auto_resync
+from .services import (
+    _fields_fingerprint,
+    async_register_services,
+    async_schedule_auto_resync,
+)
 from .signals import resolve_effective_intervals
 from .tesla_api import TeslaApi
 
@@ -126,10 +131,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         "coordinator": coordinator,
         "vin": vin,
         "api": api,
-        # Last config we pushed to the car, so the options-update listener can
-        # skip redundant re-pushes. Assume the car already holds the current
-        # resolved config (bootstrap/auto-resync keep it reconciled).
-        "pushed_intervals": dict(coordinator.effective_intervals),
     }
 
     async_register_services(hass)
@@ -168,14 +169,21 @@ async def _async_options_updated(
     # Skip a redundant push when the effective config is unchanged — e.g. only
     # the cost rate was edited, or this fired from our own last_sync stamp
     # below (which breaks what would otherwise be an update loop).
-    if record.get("pushed_intervals") == new_intervals:
+    #
+    # The comparison is against the fingerprint of the config we last actually
+    # pushed, persisted on the entry. It used to be against an in-memory value
+    # seeded at setup from the freshly resolved config, which assumed the car
+    # already held it — so after an update that changed the default signal set
+    # the two always matched and the new signals were never pushed.
+    if entry.data.get(CONF_LAST_SYNC_FIELDS_HASH) == _fields_fingerprint(
+        new_intervals
+    ):
         return
 
     # Don't push for an entry that hasn't been bootstrapped/authorized yet; its
     # first bootstrap will push the current config. Record the marker so an
     # unrelated later update doesn't push either.
     if not entry.data.get(CONF_LAST_SYNC_AT):
-        record["pushed_intervals"] = new_intervals
         return
 
     api = record.get("api")
@@ -196,8 +204,7 @@ async def _async_options_updated(
             err,
         )
         return
-    record["pushed_intervals"] = new_intervals
-    _stamp_last_sync(hass, entry)
+    _stamp_last_sync(hass, entry, new_intervals)
     _LOGGER.info(
         "tesla_telemetry: options change re-pushed telemetry config for "
         "vin=%s — %s",

@@ -17,6 +17,8 @@ auto-resolves when there's exactly one entry configured):
 """
 from __future__ import annotations
 
+import hashlib
+import json
 import logging
 import time
 from collections.abc import Mapping
@@ -42,6 +44,7 @@ from .const import (
     CONF_HOSTNAME,
     CONF_INTERVAL_PRESET,
     CONF_LAST_SYNC_AT,
+    CONF_LAST_SYNC_FIELDS_HASH,
     CONF_PARTNER_DOMAIN,
     CONF_PORT,
     CONF_PRIVATE_KEY_PEM,
@@ -182,10 +185,37 @@ def _build_telemetry_config(entry: ConfigEntry, ca_pem: str) -> TelemetryConfig:
     )
 
 
-def _stamp_last_sync(hass: HomeAssistant, entry: ConfigEntry) -> None:
-    """Record the unix timestamp of a successful telemetry config push.
-    Survives restarts so auto-resync can decide whether to fire."""
+def _fields_fingerprint(intervals: Mapping[str, int]) -> str:
+    """Stable digest of a resolved field config.
+
+    Stored rather than the whole 80-entry mapping: all anyone needs is an
+    equality test against what the car was last told, and a digest keeps the
+    config entry small.
+
+    Serialised as JSON rather than joined with separators, so that no field
+    name can be confused with the delimiters and produce a collision. Tesla's
+    Field enum never contains one today, but a digest that silently treats two
+    different configs as equal would present as "the car was never updated".
+    """
+    payload = json.dumps(sorted(intervals.items()), separators=(",", ":"))
+    return hashlib.sha256(payload.encode()).hexdigest()
+
+
+def _stamp_last_sync(
+    hass: HomeAssistant,
+    entry: ConfigEntry,
+    intervals: Mapping[str, int] | None = None,
+) -> None:
+    """Record a successful telemetry config push: when, and what.
+
+    The timestamp drives the >7-day auto-resync. The fingerprint is what lets
+    a later run tell whether the car is still holding the config we think it
+    is — an integration update that adds default signals changes it, so the
+    next resync tick pushes instead of waiting for the age to expire.
+    """
     new_data = {**entry.data, CONF_LAST_SYNC_AT: int(time.time())}
+    if intervals is not None:
+        new_data[CONF_LAST_SYNC_FIELDS_HASH] = _fields_fingerprint(intervals)
     hass.config_entries.async_update_entry(entry, data=new_data)
 
 
@@ -217,7 +247,7 @@ async def _bootstrap_handler(call: ServiceCall) -> ServiceResponse:
     response["telemetry_config"] = await api.set_fleet_telemetry_config(
         entry.data[CONF_VIN], cfg
     )
-    _stamp_last_sync(hass, entry)
+    _stamp_last_sync(hass, entry, _resolve_intervals(entry))
     _LOGGER.info(
         "tesla_telemetry: bootstrap completed for vin=%s — %s",
         entry.data[CONF_VIN],
@@ -233,7 +263,7 @@ async def _resync_handler(call: ServiceCall) -> ServiceResponse:
     ca_pem = _resolve_ca_pem(hass, entry, call.data)
     cfg = _build_telemetry_config(entry, ca_pem)
     response = await api.set_fleet_telemetry_config(entry.data[CONF_VIN], cfg)
-    _stamp_last_sync(hass, entry)
+    _stamp_last_sync(hass, entry, _resolve_intervals(entry))
     _LOGGER.info(
         "tesla_telemetry: resync completed for vin=%s — %s",
         entry.data[CONF_VIN],
@@ -279,7 +309,7 @@ async def _set_interval_preset_handler(call: ServiceCall) -> ServiceResponse:
     ca_pem = _resolve_ca_pem(hass, entry, call.data)
     cfg = _build_telemetry_config(entry, ca_pem)
     response = await api.set_fleet_telemetry_config(entry.data[CONF_VIN], cfg)
-    _stamp_last_sync(hass, entry)
+    _stamp_last_sync(hass, entry, _resolve_intervals(entry))
     intervals = _resolve_intervals(entry)
     _LOGGER.info(
         "tesla_telemetry: interval preset=%s applied for vin=%s — %s",
@@ -376,15 +406,32 @@ def async_register_services(hass: HomeAssistant) -> None:
 # Auto-resync
 # ---------------------------------------------------------------------
 async def _auto_resync_if_due(hass: HomeAssistant, entry: ConfigEntry) -> None:
-    """Re-push fleet_telemetry_config when the last successful sync is
-    older than ``AUTO_RESYNC_MAX_AGE_SECONDS``. Skips silently if the
-    user hasn't bootstrapped yet (no ``last_sync_at`` recorded) — we
-    don't push a config they haven't authorized."""
+    """Re-push fleet_telemetry_config when it is stale.
+
+    Stale means either the last successful sync is older than
+    ``AUTO_RESYNC_MAX_AGE_SECONDS``, or the resolved field config no longer
+    matches what we last pushed — which is what happens when an integration
+    update changes the default signal set. Without the second condition those
+    new signals were not requested from the vehicle until the age check
+    happened to expire, so their entities sat at ``unknown`` for up to a week
+    with nothing explaining why.
+
+    Skips silently if the user hasn't bootstrapped yet (no ``last_sync_at``
+    recorded) — we don't push a config they haven't authorized.
+    """
     last = entry.data.get(CONF_LAST_SYNC_AT)
     if not last:
         return
     age = time.time() - last
-    if age < AUTO_RESYNC_MAX_AGE_SECONDS:
+    intervals = _resolve_intervals(entry)
+    stored_hash = entry.data.get(CONF_LAST_SYNC_FIELDS_HASH)
+    # An entry stamped before this key existed has no fingerprint. Treat that
+    # as "unknown, not stale" and let the age check drive it, rather than
+    # pushing for every such entry on the next tick after an update.
+    fields_changed = (
+        stored_hash is not None and stored_hash != _fields_fingerprint(intervals)
+    )
+    if age < AUTO_RESYNC_MAX_AGE_SECONDS and not fields_changed:
         return
     try:
         api = _entry_api(hass, entry)
@@ -402,11 +449,13 @@ async def _auto_resync_if_due(hass: HomeAssistant, entry: ConfigEntry) -> None:
             err,
         )
         return
-    _stamp_last_sync(hass, entry)
+    _stamp_last_sync(hass, entry, intervals)
     _LOGGER.info(
-        "tesla_telemetry: auto-resync ok for vin=%s after %ds: %s",
+        "tesla_telemetry: auto-resync ok for vin=%s after %ds (%s, %d fields): %s",
         entry.data[CONF_VIN],
         int(age),
+        "field config changed" if fields_changed else "age",
+        len(intervals),
         result,
     )
 

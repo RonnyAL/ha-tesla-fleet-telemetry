@@ -389,5 +389,14 @@ TOKEN_REFRESH_LEEWAY = 60
 # 7 days old. Survives HA restarts because `last_sync_at` lives in
 # entry.data.
 CONF_LAST_SYNC_AT = "last_sync_at"
+
+# Fingerprint of the field config that was last successfully pushed to the
+# vehicle. Persisted so restarts do not have to *assume* what the car holds.
+# Without it an integration update that changes DEFAULT_INTERVALS_SECONDS left
+# the car on the old config: setup seeded its "already pushed" marker from the
+# freshly resolved config, so the two always compared equal, the options-change
+# listener short-circuited, and the newly defaulted signals were not requested
+# until the >7-day auto-resync happened to fire.
+CONF_LAST_SYNC_FIELDS_HASH = "last_sync_fields_hash"
 AUTO_RESYNC_CHECK_INTERVAL_SECONDS = 24 * 3600
 AUTO_RESYNC_MAX_AGE_SECONDS = 7 * 24 * 3600
