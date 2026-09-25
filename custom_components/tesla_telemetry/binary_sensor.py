@@ -24,11 +24,9 @@ from homeassistant.helpers.restore_state import RestoreEntity
 
 from .const import (
     DOMAIN,
-    SIGNAL_CHARGE_PORT_DOOR_OPEN,
     SIGNAL_CHARGING_CABLE_TYPE,
     SIGNAL_DETAILED_CHARGE_STATE,
     SIGNAL_DOOR_STATE,
-    SIGNAL_DRIVER_SEAT_OCCUPIED,
     SIGNAL_LOCKED,
     SIGNAL_WINDOW_FRONT_DRIVER,
     SIGNAL_WINDOW_FRONT_PASSENGER,
@@ -123,10 +121,8 @@ async def async_setup_entry(
             ),
             # Other body / charging
             LockBinarySensor(coordinator),
-            ChargePortBinarySensor(coordinator),
             ChargeCableBinarySensor(coordinator),
             ChargingActiveBinarySensor(coordinator),
-            UserPresentBinarySensor(coordinator),
             # Claimed — see generic/claimed.py
             ClimateRunningBinarySensor(coordinator),
             SentryArmedBinarySensor(coordinator),
@@ -283,14 +279,6 @@ class LockBinarySensor(_BaseTelemetryBinarySensor):
         self._attr_is_on = None if locked is None else not locked
 
 
-ChargePortBinarySensor = _bool_binary_sensor(
-    signal=SIGNAL_CHARGE_PORT_DOOR_OPEN,
-    slug="charge_port_door_open_telemetry",
-    name="Charge port door",
-    device_class=BinarySensorDeviceClass.OPENING,
-)
-
-
 class ChargeCableBinarySensor(_BaseTelemetryBinarySensor):
     """A cable is present whenever ``ChargingCableType`` reports anything
     other than ``Unknown`` / ``SNA`` (Signal Not Available).
@@ -325,14 +313,6 @@ class ChargeCableBinarySensor(_BaseTelemetryBinarySensor):
             self._attr_is_on = False
             return
         self._attr_is_on = name not in ("CableTypeUnknown", "CableTypeSNA")
-
-
-UserPresentBinarySensor = _bool_binary_sensor(
-    signal=SIGNAL_DRIVER_SEAT_OCCUPIED,
-    slug="user_present_telemetry",
-    name="User present",
-    device_class=BinarySensorDeviceClass.OCCUPANCY,
-)
 
 
 class ChargingActiveBinarySensor(_BaseTelemetryBinarySensor):

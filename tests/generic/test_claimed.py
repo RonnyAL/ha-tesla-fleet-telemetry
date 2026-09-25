@@ -10,12 +10,15 @@ deleting one would silently suppress a generic entity that should exist.
 """
 from __future__ import annotations
 
+import asyncio
 import json
+import sys
 from pathlib import Path
 
 from custom_components.tesla_telemetry.generic.claimed import CLAIMED_SIGNALS
 
 FIXTURE = Path(__file__).resolve().parents[1] / "fixtures/legacy_unique_ids.json"
+REPO = Path(__file__).resolve().parents[2]
 
 
 def test_every_claimed_signal_is_real() -> None:
@@ -45,3 +48,35 @@ def test_fan_out_signals_are_claimed() -> None:
     fan_out = {s for s, c in counts.items() if c > 1}
     missing = sorted(fan_out - CLAIMED_SIGNALS)
     assert not missing, f"fan-out signals not claimed: {missing}"
+
+
+def test_claimed_signals_exactly_match_what_curated_entities_subscribe_to() -> None:
+    """The exhaustive test the design spec calls for.
+
+    Derives the truth by introspection rather than trusting the frozen
+    fixture (which predates this branch's entity deletions and is never
+    regenerated): instantiates the real sensor/binary_sensor/device_tracker
+    platforms and records every dispatcher topic each curated entity
+    actually subscribes to in ``async_added_to_hass`` — reusing
+    ``scripts/capture_legacy_unique_ids.py``'s ``_collect()``, which already
+    does this rather than reading class-level ``_signal_name`` alone. That
+    distinction matters: composite entities like ``AvgBatteryTempSensor``
+    and both ``device_tracker`` entities subscribe to their signals at
+    runtime and have no ``_signal_name`` of their own, so a test built on
+    ``_signal_name`` would never see them.
+
+    CLAIMED_SIGNALS must equal this set exactly. Extra means a stale claim
+    is silently suppressing a generic entity that should exist (Critical 2);
+    missing means a curated entity is racing a generic one over the same
+    data, producing a duplicate and a "does not generate unique IDs" log
+    line at every restart.
+    """
+    sys.path.insert(0, str(REPO))
+    from scripts.capture_legacy_unique_ids import _collect
+
+    data = asyncio.run(_collect())
+    subscribed: set[str] = set()
+    for entry in data.values():
+        subscribed.update(entry.get("signals", []))
+
+    assert subscribed == set(CLAIMED_SIGNALS)

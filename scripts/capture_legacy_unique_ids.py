@@ -53,7 +53,18 @@ async def _collect() -> dict[str, dict[str, object]]:
         get=lambda name: None,
     )
     hass = MagicMock()
-    hass.data = {"tesla_telemetry": {"entry": {"coordinator": coordinator}}}
+    # Platforms now also pull a generic-entity factory out of hass.data and
+    # register themselves with it (register_platform); a no-op stub is
+    # enough here since this script only cares about the curated entities.
+    generic_factory = SimpleNamespace(register_platform=lambda *a, **kw: None)
+    hass.data = {
+        "tesla_telemetry": {
+            "entry": {
+                "coordinator": coordinator,
+                "generic_factory": generic_factory,
+            }
+        }
+    }
     entry = SimpleNamespace(entry_id="entry", data={"vin": VIN}, options={})
 
     out: dict[str, dict[str, object]] = {}
