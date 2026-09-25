@@ -53,6 +53,11 @@ def signal_dispatcher_topic(vin: str, name: str) -> str:
     return f"{DOMAIN}.{vin}.{name}"
 
 
+def all_signals_topic(vin: str) -> str:
+    """Dispatcher topic carrying every sample, for the generic factory."""
+    return f"{DOMAIN}.{vin}.*"
+
+
 class TeslaTelemetryCoordinator:
     """Holds the latest sample per signal name for a single vehicle."""
 
@@ -104,6 +109,9 @@ class TeslaTelemetryCoordinator:
         self._samples[name] = sample
         async_dispatcher_send(
             self.hass, signal_dispatcher_topic(self.vin, name), sample
+        )
+        async_dispatcher_send(
+            self.hass, all_signals_topic(self.vin), name, sample
         )
 
     @property
