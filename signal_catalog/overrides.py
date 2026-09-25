@@ -45,8 +45,16 @@ OVERRIDES: dict[str, Override] = {
     'ChargeAmps': Override('A', 'current', 'measurement'),  # teslemetry
     # "The requested amps to charge the vehicle."
     'ChargeCurrentRequest': Override('A', 'current', 'measurement'),
-    # "...as a percentage of battery capacity."
-    'ChargeLimitSoc': Override('%', 'battery', 'measurement'),
+    # "...as a percentage of battery capacity." No device_class/state_class:
+    # this is a configured limit, not a live reading, and the curated
+    # ChargeLimitSocSensor it replaces deliberately carried neither — a
+    # measurement state_class would pull a rarely-changing setting into
+    # long-term statistics for no reason.
+    'ChargeLimitSoc': Override('%', None, None),
+    # No unit/state_class override needed (boolean, no metadata entry
+    # otherwise): device_class matches the curated ChargePortBinarySensor
+    # it replaces.
+    'ChargePortDoorOpen': Override(None, 'opening', None),
     'ChargeRateMilePerHour': Override('mph', 'speed', 'measurement'),  # teslemetry
     'ChargerVoltage': Override('V', 'voltage', 'measurement'),  # teslemetry
     'ChargingCableType': Override(None, 'enum', None),  # teslemetry
@@ -84,6 +92,8 @@ OVERRIDES: dict[str, Override] = {
     'DiVBatR': Override('V', 'voltage', 'measurement'),  # teslemetry
     'DiVBatREL': Override('V', 'voltage', 'measurement'),  # teslemetry
     'DiVBatRER': Override('V', 'voltage', 'measurement'),  # teslemetry
+    # device_class matches the curated UserPresentBinarySensor it replaces.
+    'DriverSeatOccupied': Override(None, 'occupancy', None),
     'EnergyRemaining': Override('kWh', 'energy_storage', 'measurement'),  # teslemetry
     'EstBatteryRange': Override('mi', 'distance', 'measurement'),  # teslemetry
     'EstimatedHoursToChargeTermination': Override('h', 'duration', 'measurement'),  # teslemetry
@@ -125,7 +135,12 @@ OVERRIDES: dict[str, Override] = {
     'ModuleTempMin': Override('°C', None, 'measurement'),  # teslemetry
     # Undocumented by Tesla; the unit is in the field name (…Kwh). Pack
     # capacity is a measurement, not a running total, so no total_increasing.
-    'NominalFullPackEnergyKwh': Override('kWh', 'energy', 'measurement'),
+    # device_class is 'energy_storage', not 'energy': HA's
+    # DEVICE_CLASS_STATE_CLASSES only allows 'energy' to pair with
+    # total/total_increasing, never 'measurement' — 'energy' + 'measurement'
+    # is an invalid combination the entity would refuse to add. The curated
+    # entity this replaces used 'energy_storage' for exactly this reason.
+    'NominalFullPackEnergyKwh': Override('kWh', 'energy_storage', 'measurement'),
     'Odometer': Override('mi', 'distance', 'total_increasing'),  # teslemetry
     'OutsideTemp': Override('°C', 'temperature', 'measurement'),  # teslemetry
     'PackCurrent': Override('A', 'current', 'measurement'),  # teslemetry
@@ -143,11 +158,16 @@ OVERRIDES: dict[str, Override] = {
     'SentryMode': Override(None, 'enum', None),  # teslemetry
     'Soc': Override('%', 'battery', 'measurement'),  # teslemetry
     # "The percent of the software update that has been downloaded."
-    # No device_class: a download percentage is not a battery level.
-    'SoftwareUpdateDownloadPercentComplete': Override('%', None, 'measurement'),
+    # No device_class: a download percentage is not a battery level. No
+    # state_class either — the curated SoftwareUpdateDownloadSensor it
+    # replaces deliberately left it unset, since a progress percentage that
+    # sits at 0 between updates and jumps to 100 is not a meaningful
+    # long-term statistic.
+    'SoftwareUpdateDownloadPercentComplete': Override('%', None, None),
     'SoftwareUpdateExpectedDurationMinutes': Override('min', 'duration', 'measurement'),  # teslemetry
-    # "The percent a software update has finished installing."
-    'SoftwareUpdateInstallationPercentComplete': Override('%', None, 'measurement'),
+    # "The percent a software update has finished installing." Same
+    # no-state_class reasoning as SoftwareUpdateDownloadPercentComplete.
+    'SoftwareUpdateInstallationPercentComplete': Override('%', None, None),
     'SpeedLimitWarning': Override(None, 'enum', None),  # teslemetry
     # "The number of hours until charging is complete."
     'TimeToFullCharge': Override('h', 'duration', 'measurement'),
