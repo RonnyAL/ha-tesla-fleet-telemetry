@@ -105,6 +105,12 @@ class _GenericEntity:
         sample = self._coordinator.get(self._signal_name)
         if sample is not None:
             self._handle(sample)
+        else:
+            # Nothing cached (e.g. a restart): fall back to whatever HA saved
+            # for this entity last time, so it doesn't read `unknown` until
+            # its signal next changes — which for a slow signal (odometer,
+            # TPMS, lifetime counters) can be hours or days.
+            await self._async_restore_last()
         self.async_on_remove(
             async_dispatcher_connect(
                 self.hass,
@@ -112,6 +118,9 @@ class _GenericEntity:
                 self._on_sample,
             )
         )
+
+    async def _async_restore_last(self) -> None:
+        """Restore whatever this entity's platform saved last. Default no-op."""
 
     @callback
     def _on_sample(self, sample: SignalSample) -> None:
@@ -147,6 +156,12 @@ class GenericSensor(_GenericEntity, RestoreSensor):
     # native_value, options and available come from SensorEntity, which
     # already reads the matching _attr_ fields.
 
+    async def _async_restore_last(self) -> None:
+        """Mirrors sensor.py's `_BaseTelemetrySensor._async_restore_last`."""
+        last = await self.async_get_last_sensor_data()
+        if last is not None and last.native_value is not None:
+            self._attr_native_value = last.native_value
+
     def _handle(self, sample: SignalSample) -> None:
         value = sample.value
         if value.HasField("invalid"):
@@ -161,6 +176,10 @@ class GenericSensor(_GenericEntity, RestoreSensor):
             field = value.DESCRIPTOR.fields_by_name[arm]
             self._attr_device_class = SensorDeviceClass.ENUM
             self._attr_state_class = None
+            # A unit is meaningless (and forbidden by HA) on an ENUM sensor:
+            # some signals carry both a numeric arm on some cars/firmware and
+            # an enum arm on others, and meta.unit describes the numeric case.
+            self._attr_native_unit_of_measurement = None
             self._attr_options = enum_options(value, self._meta)
             self._attr_native_value = _label(
                 member, field.enum_type, getattr(self._meta, "enum_labels", None)
@@ -170,6 +189,22 @@ class GenericSensor(_GenericEntity, RestoreSensor):
             self._attr_native_value = value_as_float(value)
             return
         if arm == "string_value":
+            if self._meta.unit or (
+                self._meta.device_class and self._meta.device_class != "enum"
+            ):
+                # This signal's metadata describes a unit/numeric device_class
+                # (from another arm this car sends elsewhere or on other
+                # firmware); writing a bare string here would violate that
+                # combination just as much as an enum with a stale unit does.
+                # Keep the last value rather than write an incompatible one.
+                _LOGGER.debug(
+                    "%s: ignoring string datum, unit=%r device_class=%r is "
+                    "still in effect",
+                    self._signal_name,
+                    self._meta.unit,
+                    self._meta.device_class,
+                )
+                return
             self._attr_native_value = value_as_string(value)
             return
         # An arm this entity cannot represent (e.g. boolean_value or
@@ -195,6 +230,12 @@ class GenericBinarySensor(_GenericEntity, BinarySensorEntity, RestoreEntity):
                 _LOGGER.debug("unknown device_class %r for %s", meta.device_class, signal)
 
     # is_on and available come from BinarySensorEntity.
+
+    async def _async_restore_last(self) -> None:
+        """Mirrors binary_sensor.py's `_BaseTelemetryBinarySensor` restore."""
+        last = await self.async_get_last_state()
+        if last is not None and last.state in ("on", "off"):
+            self._attr_is_on = last.state == "on"
 
     def _handle(self, sample: SignalSample) -> None:
         value = sample.value
@@ -231,6 +272,17 @@ class GenericTracker(_GenericEntity, TrackerEntity, RestoreEntity):
     _attr_longitude: float | None = None
 
     # latitude and longitude come from TrackerEntity.
+
+    async def _async_restore_last(self) -> None:
+        """Mirrors device_tracker.py's `_BaseTelemetryTracker._async_restore_location`."""
+        last = await self.async_get_last_state()
+        if last is None:
+            return
+        lat = last.attributes.get("latitude")
+        lon = last.attributes.get("longitude")
+        if lat is not None and lon is not None:
+            self._attr_latitude = lat
+            self._attr_longitude = lon
 
     def _handle(self, sample: SignalSample) -> None:
         value = sample.value
