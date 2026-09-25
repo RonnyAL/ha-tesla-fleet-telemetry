@@ -163,6 +163,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             hass, all_signals_topic(vin), factory.handle_sample
         )
     )
+    # A sample can arrive and be cached between platform setup and this
+    # subscription being wired up. Replay what's cached now that the factory
+    # is listening; `_created` makes this a no-op for anything already handled.
+    factory.replay_cache()
 
     return True
 

@@ -9,6 +9,8 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+from homeassistant.core import callback
+
 from ..signal_metadata import SIGNALS
 from .claimed import CLAIMED_SIGNALS
 from .entities import GenericBinarySensor, GenericSensor, GenericTracker
@@ -37,6 +39,7 @@ class GenericEntityFactory:
     def register_platform(self, domain: str, add_entities: Any) -> None:
         self._add_entities[domain] = add_entities
 
+    @callback
     def handle_sample(self, signal: str, sample: Any) -> None:
         """Create the entity for `signal` if this is the first usable datum."""
         if signal in self._created or signal in CLAIMED_SIGNALS:
@@ -66,12 +69,10 @@ class GenericEntityFactory:
         Without this, a slow signal such as odometer would have no entity
         until it next changed, which can be hours.
         """
-        from homeassistant.helpers import entity_registry as er
-
         known = {
             entry.unique_id: entry
-            for entry in er.async_entries_for_config_entry(
-                registry, self._entry.entry_id
+            for entry in registry.entities.get_entries_for_config_entry_id(
+                self._entry.entry_id
             )
         }
         for signal in SIGNALS:
@@ -86,3 +87,16 @@ class GenericEntityFactory:
                 continue
             self._created.add(signal)
             add_entities([cls(self._coordinator, signal, SIGNALS[signal])])
+
+    def replay_cache(self) -> None:
+        """Feed every already-cached sample through `handle_sample`.
+
+        A datum can arrive and be cached on the coordinator before the
+        factory is subscribed to the dispatcher (the window between platform
+        setup and this being wired up in `__init__.py`). Without this, that
+        signal gets no entity until its *next* datum, which may never come
+        for a value that only changes rarely. `_created` makes this
+        idempotent against anything already handled live.
+        """
+        for signal, sample in self._coordinator.all_samples():
+            self.handle_sample(signal, sample)

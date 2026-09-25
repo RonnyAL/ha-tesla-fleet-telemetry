@@ -123,6 +123,15 @@ class TeslaTelemetryCoordinator:
     def get(self, name: str) -> SignalSample | None:
         return self._samples.get(name)
 
+    def all_samples(self) -> list[tuple[str, SignalSample]]:
+        """Every signal name and its latest sample currently cached.
+
+        Used to replay data that arrived before a subscriber existed — e.g.
+        the generic factory, which only starts seeing new samples once it
+        connects to the dispatcher during setup.
+        """
+        return list(self._samples.items())
+
     def is_stale(self, name: str, *, now: float | None = None) -> bool:
         sample = self._samples.get(name)
         if sample is None:

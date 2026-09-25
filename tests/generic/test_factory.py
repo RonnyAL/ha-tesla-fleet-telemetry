@@ -84,6 +84,64 @@ def test_an_invalid_first_datum_creates_nothing() -> None:
     assert len(created["sensor"]) == 1
 
 
+async def test_publishing_through_the_coordinator_creates_a_working_entity(hass) -> None:
+    """Critical 1: `handle_sample` must actually work as a dispatcher callback.
+
+    Every other test in this file calls `handle_sample` directly, bypassing
+    the dispatcher entirely — they'd all pass even if `handle_sample` were
+    unusable as a HA callback. In production it is only ever driven by
+    `coordinator.async_publish` through `async_dispatcher_send`, so that is
+    the only path that exercises HA's job-type classification.
+
+    Without `@callback` on `handle_sample`, HA classifies it as an executor
+    job and runs it on a worker thread; the real `add_entities` it calls
+    from there (`EntityPlatform._async_schedule_add_entities`) then calls
+    `hass.async_create_task_internal`, which requires the event loop thread
+    and raises "loop ... is not the running loop". No entity is ever
+    created. This test builds a real `EntityPlatform` (not a hand-rolled
+    callback) so that failure mode is actually reachable.
+    """
+    from homeassistant.helpers import entity_registry as er
+    from homeassistant.helpers.dispatcher import async_dispatcher_connect
+    from pytest_homeassistant_custom_component.common import (
+        MockConfigEntry,
+        MockEntityPlatform,
+    )
+
+    from custom_components.tesla_telemetry.const import DOMAIN
+    from custom_components.tesla_telemetry.coordinator import (
+        TeslaTelemetryCoordinator,
+        all_signals_topic,
+    )
+    from custom_components.tesla_telemetry.generic.naming import generic_unique_id
+
+    entry = MockConfigEntry(domain=DOMAIN, unique_id=VIN, data={"vin": VIN}, version=3)
+    entry.add_to_hass(hass)
+
+    coordinator = TeslaTelemetryCoordinator(hass, VIN, "Test")
+    factory = GenericEntityFactory(hass=hass, entry=entry, coordinator=coordinator)
+
+    platform = MockEntityPlatform(hass, domain="binary_sensor", platform_name=DOMAIN)
+    platform.config_entry = entry
+    factory.register_platform("binary_sensor", platform._async_schedule_add_entities)
+
+    async_dispatcher_connect(hass, all_signals_topic(VIN), factory.handle_sample)
+
+    # DriveRail, not Locked: Locked is claimed and would get no generic
+    # entity, defeating the test.
+    coordinator.async_publish("DriveRail", pb.Value(boolean_value=True))
+    await hass.async_block_till_done()
+
+    registry = er.async_get(hass)
+    entity_id = registry.async_get_entity_id(
+        "binary_sensor", DOMAIN, generic_unique_id(VIN, "DriveRail")
+    )
+    assert entity_id is not None, "no entity was created from live telemetry"
+    state = hass.states.get(entity_id)
+    assert state is not None
+    assert state.state == "on"
+
+
 async def test_restore_recreates_a_known_entity(hass) -> None:
     """Without this, a slow signal has no entity until it next changes.
 
@@ -139,6 +197,43 @@ async def test_restore_does_not_duplicate_an_already_created_entity(hass) -> Non
     assert len(created) == 1
 
 
+async def test_data_arriving_before_restore_creates_only_one_entity(hass) -> None:
+    """The mirror of the previous test: data first, restore afterwards.
+
+    `__init__.py` calls `async_restore_known` before subscribing the
+    dispatcher, but nothing structural guarantees that order forever, and
+    Important 6's cache replay means a signal can be handled live before
+    restore ever looks at it. `_created` must make this idempotent
+    regardless of which happens first — only the restore-then-data order was
+    covered before.
+    """
+    from homeassistant.helpers import entity_registry as er
+    from pytest_homeassistant_custom_component.common import MockConfigEntry
+
+    from custom_components.tesla_telemetry.const import DOMAIN
+    from custom_components.tesla_telemetry.generic.naming import generic_unique_id
+
+    entry = MockConfigEntry(domain=DOMAIN, unique_id=VIN, data={"vin": VIN}, version=3)
+    entry.add_to_hass(hass)
+    registry = er.async_get(hass)
+
+    coordinator = SimpleNamespace(vin=VIN, device_info={}, get=lambda n: None)
+    created: list = []
+    factory = GenericEntityFactory(hass=hass, entry=entry, coordinator=coordinator)
+    factory.register_platform("sensor", created.extend)
+
+    factory.handle_sample("Odometer", _sample(pb.Value(double_value=1234.0)))
+    # Simulate the entity registry now holding the entity a real
+    # `add_entities` call would have just registered.
+    registry.async_get_or_create(
+        "sensor", DOMAIN, generic_unique_id(VIN, "Odometer"), config_entry=entry
+    )
+
+    factory.async_restore_known(registry)
+
+    assert len(created) == 1
+
+
 def test_a_platform_that_never_registered_drops_its_entities() -> None:
     """Platforms register independently; a datum arriving before one has set
     up must not raise."""
@@ -147,3 +242,52 @@ def test_a_platform_that_never_registered_drops_its_entities() -> None:
         hass=SimpleNamespace(), entry=SimpleNamespace(entry_id="e"), coordinator=coordinator
     )
     factory.handle_sample("VehicleSpeed", _sample(pb.Value(double_value=1.0)))
+
+
+def test_replay_cache_creates_entities_for_samples_already_on_the_coordinator() -> None:
+    """Important 6: a datum arriving during platform setup must not be lost.
+
+    __init__.py subscribes the factory to the dispatcher only after
+    forwarding entry setups, so a sample that arrives in that window is
+    cached on the coordinator and seen by nobody live — without a replay, no
+    entity is created until that signal's *next* datum, which may be a long
+    time coming.
+    """
+    samples = {
+        "VehicleSpeed": _sample(pb.Value(double_value=10.0)),
+        "DriveRail": _sample(pb.Value(boolean_value=True)),
+    }
+    coordinator = SimpleNamespace(
+        vin=VIN,
+        device_info={},
+        get=lambda n: None,
+        all_samples=lambda: list(samples.items()),
+    )
+    created: dict[str, list] = {"sensor": [], "binary_sensor": [], "device_tracker": []}
+    factory = GenericEntityFactory(
+        hass=SimpleNamespace(), entry=SimpleNamespace(entry_id="e"), coordinator=coordinator
+    )
+    for domain in created:
+        factory.register_platform(domain, lambda es, d=domain: created[d].extend(es))
+
+    factory.replay_cache()
+
+    assert len(created["sensor"]) == 1
+    assert len(created["binary_sensor"]) == 1
+
+
+def test_replay_cache_does_not_duplicate_a_signal_already_handled_live() -> None:
+    samples = {"VehicleSpeed": _sample(pb.Value(double_value=10.0))}
+    coordinator = SimpleNamespace(
+        vin=VIN,
+        device_info={},
+        get=lambda n: None,
+        all_samples=lambda: list(samples.items()),
+    )
+    factory, created = _factory()
+    factory._coordinator = coordinator
+
+    factory.handle_sample("VehicleSpeed", samples["VehicleSpeed"])
+    factory.replay_cache()
+
+    assert len(created["sensor"]) == 1
