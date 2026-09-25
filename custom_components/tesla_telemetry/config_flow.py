@@ -76,7 +76,9 @@ class TeslaTelemetryOAuth2FlowHandler(
     # Bumped from 1: v1 entries used a hand-rolled refresh_token grant
     # whose data shape is incompatible with HA's OAuth2 framework.
     # async_migrate_entry returns False for v1 so the user re-creates them.
-    VERSION = 2
+    # Bumped from 2: v2 -> v3 renames legacy entity unique_ids onto the
+    # generic naming rule (see migration.py).
+    VERSION = 3
 
     def __init__(self) -> None:
         super().__init__()

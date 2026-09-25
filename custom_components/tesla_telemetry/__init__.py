@@ -22,6 +22,7 @@ from .const import (
     DOMAIN,
 )
 from .coordinator import TeslaTelemetryCoordinator
+from .migration import async_migrate_unique_ids
 from .receiver import TeslaTelemetryView
 from .services import (
     _fields_fingerprint,
@@ -235,11 +236,19 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 
 async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    """Block v1 entries — they used a hand-rolled OAuth flow whose data
-    shape is incompatible with HA's OAuth2 framework. Returning False
-    leaves the entry in a setup-failed state and prompts the user to
-    re-create it (which will go through the new application_credentials
-    flow and obtain an independent grant from Tesla)."""
+    """Migrate an older config entry.
+
+    v1 entries used a hand-rolled OAuth flow whose data shape is
+    incompatible with HA's OAuth2 framework. Returning False leaves the
+    entry in a setup-failed state and prompts the user to re-create it
+    (which will go through the new application_credentials flow and obtain
+    an independent grant from Tesla).
+
+    v2 -> v3 renames legacy entity unique_ids onto the generic naming rule
+    (see migration.py). This runs before async_setup_entry, so the rewrite
+    always completes before any generic entity could claim one of the
+    target ids.
+    """
     if entry.version < 2:
         _LOGGER.error(
             "tesla_telemetry: config entry %s was created against the old "
@@ -250,4 +259,9 @@ async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             entry.version,
         )
         return False
+
+    if entry.version < 3:
+        await async_migrate_unique_ids(hass, entry)
+        hass.config_entries.async_update_entry(entry, version=3)
+
     return True
