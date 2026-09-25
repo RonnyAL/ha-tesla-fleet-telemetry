@@ -126,6 +126,78 @@ DEFAULT_INTERVALS_SECONDS: dict[str, int] = {
     SIGNAL_MOTOR_STATOR_TEMP_REAR: 10,
     SIGNAL_MODULE_TEMP_MAX: 30,
     SIGNAL_MODULE_TEMP_MIN: 30,
+    # -------------------------------------------------------------------
+    # Local additions (inlined from the removed stopgap module's interval
+    # table). Push-on-change still applies: the interval is only a ceiling
+    # while a value is actually moving.
+    #
+    # That is what decides a sensible default here, not the number in
+    # isolation. A near-static boolean (ValetModeEnabled, LocatedAtHome,
+    # SentryMode) costs essentially nothing at a 5 s ceiling, because the car
+    # only sends it when it flips — and the tight ceiling keeps the UI
+    # responsive when it does. The signals worth spending a long ceiling on
+    # are the ones whose value moves continuously, where the ceiling binds on
+    # every single interval:
+    #
+    #   Odometer, EnergyRemaining, ExpectedEnergyPercentAtTripArrival — move
+    #   continuously while driving, so they are held at 300 s. Odometer's
+    #   300 s is also the value it carried upstream before v0.4.0 removed it
+    #   (c377e5d^).
+    #   LifetimeEnergy{Used,GainedRegen,ChargedKwh} — monotonic counters that
+    #   increment throughout every drive and charge. Nothing consumes them at
+    #   five-minute resolution, so they sit at 3600 s.
+    # -------------------------------------------------------------------
+    # charging
+    "ChargeAmps": 10,
+    "ChargerVoltage": 10,
+    "ChargeCurrentRequest": 10,
+    "ChargerPhases": 60,
+    "ChargePortLatch": 5,
+    "ChargePortColdWeatherMode": 30,
+    "ScheduledChargingPending": 30,
+    "PreconditioningEnabled": 5,
+    # battery
+    "EnergyRemaining": 300,
+    "BatteryHeaterOn": 10,
+    # climate
+    "HvacPower": 5,
+    "HvacLeftTemperatureRequest": 10,
+    "HvacRightTemperatureRequest": 10,
+    "DefrostMode": 5,
+    "ClimateKeeperMode": 5,
+    "WiperHeatEnabled": 30,
+    # body / security
+    "SentryMode": 5,
+    "GuestModeEnabled": 30,
+    "ValetModeEnabled": 30,
+    "LocatedAtHome": 5,
+    "HomelinkNearby": 5,
+    "TpmsPressureFl": 300,
+    "TpmsPressureFr": 300,
+    "TpmsPressureRl": 300,
+    "TpmsPressureRr": 300,
+    "TpmsSoftWarnings": 60,
+    "TpmsHardWarnings": 60,
+    # driving
+    "Odometer": 300,
+    "ExpectedEnergyPercentAtTripArrival": 300,
+    # battery health / lifetime
+    "NominalFullPackEnergyKwh": 3600,
+    "LifetimeEnergyChargedKwh": 3600,
+    "LifetimeEnergyUsed": 3600,
+    "LifetimeEnergyGainedRegen": 3600,
+    # schedules
+    "ScheduledChargingStartTime": 60,
+    "ScheduledDepartureTime": 60,
+    # cabin
+    "CabinOverheatProtectionMode": 30,
+    "HvacSteeringWheelHeatLevel": 5,
+    "RemoteStartActive": 5,
+    # places / oddities
+    "LocatedAtWork": 5,
+    "LocatedAtFavorite": 5,
+    "ServiceMode": 60,
+    "LightsHazardsActive": 5,
 }
 
 # Curated grouping of the default signals into collapsible sections for the
@@ -133,6 +205,9 @@ DEFAULT_INTERVALS_SECONDS: dict[str, int] = {
 # one category (guarded by tests/test_signals.py). Signals the user adds from
 # the full Tesla catalog that aren't listed here surface under a synthetic
 # "Additional signals" section instead.
+# Each local-addition signal goes into an existing section above (no new
+# translation keys needed) — inlined from the removed stopgap module's
+# category table.
 SIGNAL_CATEGORIES: dict[str, list[str]] = {
     "driving": [
         SIGNAL_LOCATION,
@@ -142,12 +217,20 @@ SIGNAL_CATEGORIES: dict[str, list[str]] = {
         SIGNAL_DESTINATION_LOCATION,
         SIGNAL_MILES_TO_ARRIVAL,
         SIGNAL_MINUTES_TO_ARRIVAL,
+        "Odometer",
+        "ExpectedEnergyPercentAtTripArrival",
     ],
     "battery": [
         SIGNAL_BATTERY_LEVEL,
         SIGNAL_SOC,
         SIGNAL_EST_BATTERY_RANGE,
         SIGNAL_RATED_RANGE,
+        "EnergyRemaining",
+        "BatteryHeaterOn",
+        "NominalFullPackEnergyKwh",
+        "LifetimeEnergyChargedKwh",
+        "LifetimeEnergyUsed",
+        "LifetimeEnergyGainedRegen",
     ],
     "charging": [
         SIGNAL_DETAILED_CHARGE_STATE,
@@ -160,12 +243,31 @@ SIGNAL_CATEGORIES: dict[str, list[str]] = {
         SIGNAL_CHARGE_LIMIT_SOC,
         SIGNAL_TIME_TO_FULL_CHARGE,
         SIGNAL_CHARGE_PORT_DOOR_OPEN,
+        "ChargeAmps",
+        "ChargerVoltage",
+        "ChargeCurrentRequest",
+        "ChargerPhases",
+        "ChargePortLatch",
+        "ChargePortColdWeatherMode",
+        "ScheduledChargingPending",
+        "PreconditioningEnabled",
+        "ScheduledChargingStartTime",
+        "ScheduledDepartureTime",
     ],
     "climate": [
         SIGNAL_INSIDE_TEMP,
         SIGNAL_OUTSIDE_TEMP,
         SIGNAL_HVAC_AC_ENABLED,
         SIGNAL_HVAC_AUTO_MODE,
+        "HvacPower",
+        "HvacLeftTemperatureRequest",
+        "HvacRightTemperatureRequest",
+        "DefrostMode",
+        "ClimateKeeperMode",
+        "WiperHeatEnabled",
+        "CabinOverheatProtectionMode",
+        "HvacSteeringWheelHeatLevel",
+        "RemoteStartActive",
     ],
     "body": [
         SIGNAL_DOOR_STATE,
@@ -175,6 +277,21 @@ SIGNAL_CATEGORIES: dict[str, list[str]] = {
         SIGNAL_WINDOW_REAR_PASSENGER,
         SIGNAL_LOCKED,
         SIGNAL_DRIVER_SEAT_OCCUPIED,
+        "SentryMode",
+        "GuestModeEnabled",
+        "ValetModeEnabled",
+        "LocatedAtHome",
+        "HomelinkNearby",
+        "TpmsPressureFl",
+        "TpmsPressureFr",
+        "TpmsPressureRl",
+        "TpmsPressureRr",
+        "TpmsSoftWarnings",
+        "TpmsHardWarnings",
+        "LocatedAtWork",
+        "LocatedAtFavorite",
+        "ServiceMode",
+        "LightsHazardsActive",
     ],
     "software": [
         SIGNAL_SOFTWARE_UPDATE_VERSION,
@@ -188,14 +305,6 @@ SIGNAL_CATEGORIES: dict[str, list[str]] = {
         SIGNAL_MODULE_TEMP_MIN,
     ],
 }
-
-# --- local patch: extra signals (see local_extras.py) ---
-from .local_extras import LOCAL_EXTRA_CATEGORIES, LOCAL_EXTRA_INTERVALS
-
-DEFAULT_INTERVALS_SECONDS.update(LOCAL_EXTRA_INTERVALS)
-for _cat, _sigs in LOCAL_EXTRA_CATEGORIES.items():
-    SIGNAL_CATEGORIES[_cat].extend(s for s in _sigs if s not in SIGNAL_CATEGORIES[_cat])
-# --- end local patch ---
 
 # Per-signal overrides configured through the options flow, stored on
 # ``entry.options`` as ``{signal_name: interval_seconds}``. A stored 0 disables

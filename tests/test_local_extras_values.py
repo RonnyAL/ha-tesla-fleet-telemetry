@@ -1,4 +1,4 @@
-"""Tests for the derived on/off extractors in ``local_extras.py``.
+"""Tests for the derived on/off extractors, now living in ``values.py``.
 
 These entities were removed upstream in v0.4.0 and restored by the local
 patch. The restored versions route through ``value_as_short_enum``, which maps
@@ -26,7 +26,7 @@ pb = pytest.importorskip(
     reason="needs protobuf",
 )
 
-from custom_components.tesla_telemetry.local_extras import (
+from custom_components.tesla_telemetry.values import (
     _hvac_running,
     _sentry_armed,
     value_as_short_enum,

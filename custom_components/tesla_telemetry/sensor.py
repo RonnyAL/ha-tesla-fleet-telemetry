@@ -74,10 +74,13 @@ from .coordinator import (
     signal_dispatcher_topic,
 )
 from .values import (
+    _number_or_enum,
     value_as_bool,
     value_as_charge_state,
+    value_as_clock_time,
     value_as_enum_name,
     value_as_float,
+    value_as_short_enum,
     value_as_string,
 )
 
@@ -127,15 +130,22 @@ async def async_setup_entry(
             ModuleTempMaxSensor(coordinator),
             ModuleTempMinSensor(coordinator),
             AvgBatteryTempSensor(coordinator),
+            # Body / security (claimed — see generic/claimed.py)
+            SentryModeStateSensor(coordinator),
+            # Climate / cabin (claimed — see generic/claimed.py)
+            ClimateStateSensor(coordinator),
+            HvacSteeringWheelHeatLevelSensor(coordinator),
+            # Charging (claimed — see generic/claimed.py)
+            ScheduledChargingStartSensor(coordinator),
+            ScheduledDepartureSensor(coordinator),
             # Signal accounting / estimated cost
             SignalsReceivedSensor(coordinator),
             EstimatedSignalCostSensor(coordinator, entry),
         ]
     )
-    # local patch: extra entities (see local_extras.py)
-    from .local_extras import local_sensor_entities
 
-    async_add_entities(local_sensor_entities(coordinator))
+    factory = hass.data[DOMAIN][entry.entry_id]["generic_factory"]
+    factory.register_platform("sensor", async_add_entities)
 
 
 # ---------------------------------------------------------------------------
@@ -492,6 +502,23 @@ ChargeLimitSocSensor = _scalar_sensor(
 )
 
 
+ScheduledChargingStartSensor = _scalar_sensor(
+    signal="ScheduledChargingStartTime",
+    suffix="scheduled_charging_start_telemetry",
+    name="Scheduled charging start",
+    state_class=None,
+    extractor=value_as_clock_time,
+)
+
+ScheduledDepartureSensor = _scalar_sensor(
+    signal="ScheduledDepartureTime",
+    suffix="scheduled_departure_telemetry",
+    name="Scheduled departure",
+    state_class=None,
+    extractor=value_as_clock_time,
+)
+
+
 class TimeToFullChargeSensor(_BaseTelemetrySensor):
     """Hours-until-full as a duration in minutes (Tesla emits hours as a float)."""
 
@@ -533,6 +560,41 @@ OutsideTempSensor = _scalar_sensor(
     device_class=SensorDeviceClass.TEMPERATURE,
     unit=UnitOfTemperature.CELSIUS,
     precision=1,
+)
+
+# HvacPower fans out to this enum sensor plus binary_sensor.py's derived
+# "running" bool (hvac_power_telemetry) — claimed, see generic/claimed.py.
+ClimateStateSensor = _scalar_sensor(
+    signal="HvacPower",
+    suffix="hvac_power_state_telemetry",
+    name="Climate state",
+    state_class=None,
+    extractor=value_as_short_enum,
+)
+
+# HvacSteeringWheelHeatLevel is claimed: _number_or_enum resolves whichever
+# arm the car actually sent, a transform the generic path can't express.
+HvacSteeringWheelHeatLevelSensor = _scalar_sensor(
+    signal="HvacSteeringWheelHeatLevel",
+    suffix="steering_wheel_heat_level_telemetry",
+    name="Steering wheel heat level",
+    state_class=None,
+    precision=0,
+    extractor=_number_or_enum,
+)
+
+
+# ---------------------------------------------------------------------------
+# Body / security
+# ---------------------------------------------------------------------------
+# SentryMode fans out to this enum sensor plus binary_sensor.py's derived
+# "armed" bool (sentry_armed_telemetry) — claimed, see generic/claimed.py.
+SentryModeStateSensor = _scalar_sensor(
+    signal="SentryMode",
+    suffix="sentry_mode_state_telemetry",
+    name="Sentry mode",
+    state_class=None,
+    extractor=value_as_short_enum,
 )
 
 # ---------------------------------------------------------------------------

@@ -9,6 +9,8 @@ from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
 from homeassistant.helpers import aiohttp_client, config_entry_oauth2_flow
+from homeassistant.helpers import entity_registry as er
+from homeassistant.helpers.dispatcher import async_dispatcher_connect
 
 from .const import (
     CONF_LAST_SYNC_AT,
@@ -21,7 +23,8 @@ from .const import (
     DEFAULT_REGION,
     DOMAIN,
 )
-from .coordinator import TeslaTelemetryCoordinator
+from .coordinator import TeslaTelemetryCoordinator, all_signals_topic
+from .generic.factory import GenericEntityFactory
 from .migration import async_migrate_unique_ids
 from .receiver import TeslaTelemetryView
 from .services import (
@@ -128,10 +131,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             entry.entry_id,
         )
 
+    factory = GenericEntityFactory(hass, entry, coordinator)
+
     domain_data[entry.entry_id] = {
         "coordinator": coordinator,
         "vin": vin,
         "api": api,
+        "generic_factory": factory,
     }
 
     async_register_services(hass)
@@ -146,6 +152,17 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     if PLATFORMS:
         await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+
+    # Recreate generic entities already in the registry (e.g. a slow signal
+    # like odometer, whose next datum could be hours away), then subscribe
+    # the factory to every future sample so new signals get an entity the
+    # first time the car actually sends them.
+    factory.async_restore_known(er.async_get(hass))
+    entry.async_on_unload(
+        async_dispatcher_connect(
+            hass, all_signals_topic(vin), factory.handle_sample
+        )
+    )
 
     return True
 

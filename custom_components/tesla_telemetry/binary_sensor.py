@@ -41,6 +41,8 @@ from .coordinator import (
     signal_dispatcher_topic,
 )
 from .values import (
+    _hvac_running,
+    _sentry_armed,
     value_as_bool,
     value_as_door_state,
     value_as_enum_name,
@@ -125,12 +127,16 @@ async def async_setup_entry(
             ChargeCableBinarySensor(coordinator),
             ChargingActiveBinarySensor(coordinator),
             UserPresentBinarySensor(coordinator),
+            # Claimed — see generic/claimed.py
+            ClimateRunningBinarySensor(coordinator),
+            SentryArmedBinarySensor(coordinator),
+            TpmsSoftWarningBinarySensor(coordinator),
+            TpmsHardWarningBinarySensor(coordinator),
         ]
     )
-    # local patch: extra entities (see local_extras.py)
-    from .local_extras import local_binary_sensor_entities
 
-    async_add_entities(local_binary_sensor_entities(coordinator))
+    factory = hass.data[DOMAIN][entry.entry_id]["generic_factory"]
+    factory.register_platform("binary_sensor", async_add_entities)
 
 
 # ---------------------------------------------------------------------------
@@ -342,3 +348,40 @@ class ChargingActiveBinarySensor(_BaseTelemetryBinarySensor):
 
     def _handle(self, sample: SignalSample) -> None:
         self._attr_is_on = value_charging_active(sample.value)
+
+
+# HvacPower fans out to sensor.py's ClimateStateSensor plus this derived
+# "running" bool — claimed, see generic/claimed.py.
+ClimateRunningBinarySensor = _bool_binary_sensor(
+    signal="HvacPower",
+    slug="hvac_power_telemetry",
+    name="Climate",
+    device_class=BinarySensorDeviceClass.RUNNING,
+    extractor=_hvac_running,
+)
+
+# SentryMode fans out to sensor.py's SentryModeStateSensor plus this derived
+# "armed" bool — claimed, see generic/claimed.py.
+SentryArmedBinarySensor = _bool_binary_sensor(
+    signal="SentryMode",
+    slug="sentry_armed_telemetry",
+    name="Sentry armed",
+    device_class=BinarySensorDeviceClass.SAFETY,
+    extractor=_sentry_armed,
+)
+
+# TpmsSoftWarnings / TpmsHardWarnings are claimed: metadata says enum
+# (TireLocation), curated treats any nonzero ordinal as bool-truthy.
+TpmsSoftWarningBinarySensor = _bool_binary_sensor(
+    signal="TpmsSoftWarnings",
+    slug="tpms_soft_warning_telemetry",
+    name="Tire pressure warning",
+    device_class=BinarySensorDeviceClass.PROBLEM,
+)
+
+TpmsHardWarningBinarySensor = _bool_binary_sensor(
+    signal="TpmsHardWarnings",
+    slug="tpms_hard_warning_telemetry",
+    name="Tire pressure critical",
+    device_class=BinarySensorDeviceClass.PROBLEM,
+)

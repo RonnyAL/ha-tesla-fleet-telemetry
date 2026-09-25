@@ -286,6 +286,11 @@ is otherwise completely silent from Home Assistant's side.
   set until you re-authorize: **Settings → Devices & Services →
   Tesla Fleet Telemetry → ⋮ → Reconfigure**. Your vehicle, endpoint and signal
   settings — and all entity history — are preserved.
+* **Duplicate entities after downgrading.** This version renames some entity
+  unique_ids once, so that entities created before it keep their history under
+  the new naming. Downgrading afterwards recreates the old ids alongside the
+  new ones, giving you two of some entities. Delete the stale ones from
+  **Settings → Devices & Services → Entities**, or upgrade again.
 * Enable debug logging with:
   ```yaml
   logger:
