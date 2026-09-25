@@ -52,6 +52,9 @@ async def async_setup_entry(
         ]
     )
 
+    factory = hass.data[DOMAIN][entry.entry_id]["generic_factory"]
+    factory.register_platform("device_tracker", async_add_entities)
+
 
 class _BaseTelemetryTracker(TrackerEntity, RestoreEntity):
     """Shared plumbing — dispatcher subscription, lat/lon storage.

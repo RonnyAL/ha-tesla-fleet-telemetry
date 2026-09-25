@@ -47,6 +47,7 @@ class SignalRecord:
     unit: str | None
     device_class: str | None
     state_class: str | None
+    enum_labels: dict[str, str] | None
     min_firmware: str | None
     semi_only: bool
     documented: bool
@@ -114,6 +115,7 @@ def reconcile(
                 unit=override.unit if override else None,
                 device_class=override.device_class if override else None,
                 state_class=override.state_class if override else None,
+                enum_labels=override.enum_labels if override else None,
                 min_firmware=proto.firmware.get(field_id),
                 semi_only=field_id in proto.semi_only,
                 documented=name in documented,

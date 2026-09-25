@@ -39,6 +39,7 @@ class SignalMeta:
     unit: str | None
     device_class: str | None
     state_class: str | None
+    enum_labels: dict[str, str] | None
     min_firmware: str | None
     semi_only: bool
     documented: bool
@@ -62,6 +63,7 @@ def render_module(records: list[SignalRecord]) -> str:
             f"        unit={record.unit!r},\n"
             f"        device_class={record.device_class!r},\n"
             f"        state_class={record.state_class!r},\n"
+            f"        enum_labels={record.enum_labels!r},\n"
             f"        min_firmware={record.min_firmware!r},\n"
             f"        semi_only={record.semi_only!r},\n"
             f"        documented={record.documented!r},\n"

@@ -22,12 +22,7 @@ from homeassistant.components.sensor import (
 )
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import (
-    PERCENTAGE,
     EntityCategory,
-    UnitOfEnergy,
-    UnitOfLength,
-    UnitOfPower,
-    UnitOfSpeed,
     UnitOfTemperature,
     UnitOfTime,
 )
@@ -40,33 +35,14 @@ from .const import (
     CONF_COST_PER_MILLION_SIGNALS,
     DEFAULT_COST_PER_MILLION_SIGNALS,
     DOMAIN,
-    SIGNAL_AC_CHARGING_ENERGY_IN,
-    SIGNAL_AC_CHARGING_POWER,
-    SIGNAL_BATTERY_LEVEL,
-    SIGNAL_CHARGE_LIMIT_SOC,
     SIGNAL_CHARGING_CABLE_TYPE,
     SIGNAL_COUNT_FLUSH_INTERVAL_SECONDS,
-    SIGNAL_DC_CHARGING_ENERGY_IN,
-    SIGNAL_DC_CHARGING_POWER,
     SIGNAL_DETAILED_CHARGE_STATE,
-    SIGNAL_EST_BATTERY_RANGE,
     SIGNAL_FAST_CHARGER_PRESENT,
-    SIGNAL_GEAR,
-    SIGNAL_INSIDE_TEMP,
-    SIGNAL_MILES_TO_ARRIVAL,
     SIGNAL_MINUTES_TO_ARRIVAL,
     SIGNAL_MODULE_TEMP_MAX,
     SIGNAL_MODULE_TEMP_MIN,
-    SIGNAL_MOTOR_STATOR_TEMP_FRONT,
-    SIGNAL_MOTOR_STATOR_TEMP_REAR,
-    SIGNAL_OUTSIDE_TEMP,
-    SIGNAL_RATED_RANGE,
-    SIGNAL_SOC,
-    SIGNAL_SOFTWARE_UPDATE_DOWNLOAD_PCT,
-    SIGNAL_SOFTWARE_UPDATE_INSTALL_PCT,
-    SIGNAL_SOFTWARE_UPDATE_VERSION,
     SIGNAL_TIME_TO_FULL_CHARGE,
-    SIGNAL_VEHICLE_SPEED,
 )
 from .coordinator import (
     SignalSample,
@@ -74,10 +50,13 @@ from .coordinator import (
     signal_dispatcher_topic,
 )
 from .values import (
+    _number_or_enum,
     value_as_bool,
     value_as_charge_state,
+    value_as_clock_time,
     value_as_enum_name,
     value_as_float,
+    value_as_short_enum,
     value_as_string,
 )
 
@@ -94,48 +73,32 @@ async def async_setup_entry(
     ]
     async_add_entities(
         [
-            # Driving / nav
-            SpeedSensor(coordinator),
-            DistanceToArrivalSensor(coordinator),
+            # Driving / nav (claimed — see generic/claimed.py)
             TimeToArrivalSensor(coordinator),
-            GearSensor(coordinator),
-            # Battery / range
-            BatteryLevelSensor(coordinator),
-            SocSensor(coordinator),
-            EstBatteryRangeSensor(coordinator),
-            RatedRangeSensor(coordinator),
-            # Charging
+            # Charging (claimed — see generic/claimed.py)
             ChargingStateSensor(coordinator),
-            AcChargingPowerSensor(coordinator),
-            DcChargingPowerSensor(coordinator),
-            AcChargingEnergyInSensor(coordinator),
-            DcChargingEnergyInSensor(coordinator),
             FastChargerPresentSensor(coordinator),
             ChargingCableTypeSensor(coordinator),
-            ChargeLimitSocSensor(coordinator),
             TimeToFullChargeSensor(coordinator),
-            # Climate / cabin
-            InsideTempSensor(coordinator),
-            OutsideTempSensor(coordinator),
-            # Software update
-            SoftwareVersionSensor(coordinator),
-            SoftwareUpdateDownloadSensor(coordinator),
-            SoftwareUpdateInstallSensor(coordinator),
-            # Powertrain / performance
-            MotorStatorTempFrontSensor(coordinator),
-            MotorStatorTempRearSensor(coordinator),
+            ScheduledChargingStartSensor(coordinator),
+            ScheduledDepartureSensor(coordinator),
+            # Powertrain / performance (claimed — see generic/claimed.py)
             ModuleTempMaxSensor(coordinator),
             ModuleTempMinSensor(coordinator),
             AvgBatteryTempSensor(coordinator),
+            # Body / security (claimed — see generic/claimed.py)
+            SentryModeStateSensor(coordinator),
+            # Climate / cabin (claimed — see generic/claimed.py)
+            ClimateStateSensor(coordinator),
+            HvacSteeringWheelHeatLevelSensor(coordinator),
             # Signal accounting / estimated cost
             SignalsReceivedSensor(coordinator),
             EstimatedSignalCostSensor(coordinator, entry),
         ]
     )
-    # local patch: extra entities (see local_extras.py)
-    from .local_extras import local_sensor_entities
 
-    async_add_entities(local_sensor_entities(coordinator))
+    factory = hass.data[DOMAIN][entry.entry_id]["generic_factory"]
+    factory.register_platform("sensor", async_add_entities)
 
 
 # ---------------------------------------------------------------------------
@@ -230,40 +193,8 @@ def _scalar_sensor(
 
 
 # ---------------------------------------------------------------------------
-# Driving / nav
+# Driving / nav (claimed — see generic/claimed.py)
 # ---------------------------------------------------------------------------
-class SpeedSensor(_BaseTelemetrySensor):
-    _signal_name = SIGNAL_VEHICLE_SPEED
-    _attr_name = "Speed"
-    _attr_device_class = SensorDeviceClass.SPEED
-    _attr_state_class = SensorStateClass.MEASUREMENT
-    _attr_native_unit_of_measurement = UnitOfSpeed.MILES_PER_HOUR
-    _attr_suggested_display_precision = 0
-
-    def __init__(self, coordinator: TeslaTelemetryCoordinator) -> None:
-        super().__init__(coordinator)
-        self._attr_unique_id = f"{coordinator.vin}_vehicle_speed_telemetry"
-
-    def _handle(self, sample: SignalSample) -> None:
-        self._attr_native_value = value_as_float(sample.value)
-
-
-class DistanceToArrivalSensor(_BaseTelemetrySensor):
-    _signal_name = SIGNAL_MILES_TO_ARRIVAL
-    _attr_name = "Distance to arrival"
-    _attr_device_class = SensorDeviceClass.DISTANCE
-    _attr_state_class = SensorStateClass.MEASUREMENT
-    _attr_native_unit_of_measurement = UnitOfLength.MILES
-    _attr_suggested_display_precision = 1
-
-    def __init__(self, coordinator: TeslaTelemetryCoordinator) -> None:
-        super().__init__(coordinator)
-        self._attr_unique_id = f"{coordinator.vin}_miles_to_arrival_telemetry"
-
-    def _handle(self, sample: SignalSample) -> None:
-        self._attr_native_value = value_as_float(sample.value)
-
-
 class TimeToArrivalSensor(_BaseTelemetrySensor):
     """Anchor the absolute ETA against the vehicle-side ``created_at`` so
     jittery delivery doesn't make the rendered "5 min from now" jump around."""
@@ -287,73 +218,8 @@ class TimeToArrivalSensor(_BaseTelemetrySensor):
         )
 
 
-class GearSensor(_BaseTelemetrySensor):
-    """Friendly shift-state string (P/R/N/D) extracted from ShiftState enum."""
-
-    _signal_name = SIGNAL_GEAR
-    _attr_name = "Gear"
-    _attr_state_class = None
-
-    _GEAR_MAP: ClassVar[dict[str, str | None]] = {
-        "ShiftStateP": "P",
-        "ShiftStateR": "R",
-        "ShiftStateN": "N",
-        "ShiftStateD": "D",
-        "ShiftStateInvalid": None,
-        "ShiftStateUnknown": None,
-    }
-
-    def __init__(self, coordinator: TeslaTelemetryCoordinator) -> None:
-        super().__init__(coordinator)
-        self._attr_unique_id = f"{coordinator.vin}_gear_telemetry"
-
-    def _handle(self, sample: SignalSample) -> None:
-        name = value_as_enum_name(sample.value)
-        self._attr_native_value = self._GEAR_MAP.get(name, name) if name else None
-
-
 # ---------------------------------------------------------------------------
-# Battery / range
-# ---------------------------------------------------------------------------
-BatteryLevelSensor = _scalar_sensor(
-    signal=SIGNAL_BATTERY_LEVEL,
-    suffix="battery_level_telemetry",
-    name="Battery level",
-    device_class=SensorDeviceClass.BATTERY,
-    unit=PERCENTAGE,
-    precision=0,
-)
-
-SocSensor = _scalar_sensor(
-    signal=SIGNAL_SOC,
-    suffix="soc_telemetry",
-    name="State of charge",
-    device_class=SensorDeviceClass.BATTERY,
-    unit=PERCENTAGE,
-    precision=1,
-)
-
-EstBatteryRangeSensor = _scalar_sensor(
-    signal=SIGNAL_EST_BATTERY_RANGE,
-    suffix="battery_range_telemetry",
-    name="Battery range",
-    device_class=SensorDeviceClass.DISTANCE,
-    unit=UnitOfLength.MILES,
-    precision=0,
-)
-
-RatedRangeSensor = _scalar_sensor(
-    signal=SIGNAL_RATED_RANGE,
-    suffix="rated_range_telemetry",
-    name="Rated range",
-    device_class=SensorDeviceClass.DISTANCE,
-    unit=UnitOfLength.MILES,
-    precision=0,
-)
-
-
-# ---------------------------------------------------------------------------
-# Charging
+# Charging (claimed — see generic/claimed.py)
 # ---------------------------------------------------------------------------
 class ChargingStateSensor(_BaseTelemetrySensor):
     """Friendly charging state string (charging/disconnected/etc).
@@ -382,44 +248,6 @@ class ChargingStateSensor(_BaseTelemetrySensor):
     def _handle(self, sample: SignalSample) -> None:
         self._attr_native_value = value_as_charge_state(sample.value)
 
-
-AcChargingPowerSensor = _scalar_sensor(
-    signal=SIGNAL_AC_CHARGING_POWER,
-    suffix="ac_charging_power_telemetry",
-    name="AC charging power",
-    device_class=SensorDeviceClass.POWER,
-    unit=UnitOfPower.KILO_WATT,
-    precision=2,
-)
-
-DcChargingPowerSensor = _scalar_sensor(
-    signal=SIGNAL_DC_CHARGING_POWER,
-    suffix="dc_charging_power_telemetry",
-    name="DC charging power",
-    device_class=SensorDeviceClass.POWER,
-    unit=UnitOfPower.KILO_WATT,
-    precision=1,
-)
-
-AcChargingEnergyInSensor = _scalar_sensor(
-    signal=SIGNAL_AC_CHARGING_ENERGY_IN,
-    suffix="ac_charging_energy_in_telemetry",
-    name="AC charge energy added",
-    device_class=SensorDeviceClass.ENERGY,
-    state_class=SensorStateClass.TOTAL_INCREASING,
-    unit=UnitOfEnergy.KILO_WATT_HOUR,
-    precision=2,
-)
-
-DcChargingEnergyInSensor = _scalar_sensor(
-    signal=SIGNAL_DC_CHARGING_ENERGY_IN,
-    suffix="dc_charging_energy_in_telemetry",
-    name="DC charge energy added",
-    device_class=SensorDeviceClass.ENERGY,
-    state_class=SensorStateClass.TOTAL_INCREASING,
-    unit=UnitOfEnergy.KILO_WATT_HOUR,
-    precision=2,
-)
 
 class FastChargerPresentSensor(_BaseTelemetrySensor):
     """Friendly fast-charger type (Supercharger/CCS/CHAdeMO/none).
@@ -482,13 +310,20 @@ class ChargingCableTypeSensor(_BaseTelemetrySensor):
         self._attr_native_value = self._MAP.get(name, value_as_string(sample.value))
 
 
-ChargeLimitSocSensor = _scalar_sensor(
-    signal=SIGNAL_CHARGE_LIMIT_SOC,
-    suffix="charge_limit_soc_telemetry",
-    name="Charge limit",
+ScheduledChargingStartSensor = _scalar_sensor(
+    signal="ScheduledChargingStartTime",
+    suffix="scheduled_charging_start_telemetry",
+    name="Scheduled charging start",
     state_class=None,
-    unit=PERCENTAGE,
-    precision=0,
+    extractor=value_as_clock_time,
+)
+
+ScheduledDepartureSensor = _scalar_sensor(
+    signal="ScheduledDepartureTime",
+    suffix="scheduled_departure_telemetry",
+    name="Scheduled departure",
+    state_class=None,
+    extractor=value_as_clock_time,
 )
 
 
@@ -515,82 +350,46 @@ class TimeToFullChargeSensor(_BaseTelemetrySensor):
 
 
 # ---------------------------------------------------------------------------
-# Climate / cabin
+# Climate / cabin (claimed — see generic/claimed.py)
 # ---------------------------------------------------------------------------
-InsideTempSensor = _scalar_sensor(
-    signal=SIGNAL_INSIDE_TEMP,
-    suffix="inside_temperature_telemetry",
-    name="Inside temperature",
-    device_class=SensorDeviceClass.TEMPERATURE,
-    unit=UnitOfTemperature.CELSIUS,
-    precision=1,
-)
-
-OutsideTempSensor = _scalar_sensor(
-    signal=SIGNAL_OUTSIDE_TEMP,
-    suffix="outside_temperature_telemetry",
-    name="Outside temperature",
-    device_class=SensorDeviceClass.TEMPERATURE,
-    unit=UnitOfTemperature.CELSIUS,
-    precision=1,
-)
-
-# ---------------------------------------------------------------------------
-# Software update
-# ---------------------------------------------------------------------------
-class SoftwareVersionSensor(_BaseTelemetrySensor):
-    _signal_name = SIGNAL_SOFTWARE_UPDATE_VERSION
-    _attr_name = "Software version"
-    _attr_state_class = None
-
-    def __init__(self, coordinator: TeslaTelemetryCoordinator) -> None:
-        super().__init__(coordinator)
-        self._attr_unique_id = f"{coordinator.vin}_software_version_telemetry"
-
-    def _handle(self, sample: SignalSample) -> None:
-        self._attr_native_value = value_as_string(sample.value)
-
-
-SoftwareUpdateDownloadSensor = _scalar_sensor(
-    signal=SIGNAL_SOFTWARE_UPDATE_DOWNLOAD_PCT,
-    suffix="software_update_download_telemetry",
-    name="Software update download",
+# HvacPower fans out to this enum sensor plus binary_sensor.py's derived
+# "running" bool (hvac_power_telemetry).
+ClimateStateSensor = _scalar_sensor(
+    signal="HvacPower",
+    suffix="hvac_power_state_telemetry",
+    name="Climate state",
     state_class=None,
-    unit=PERCENTAGE,
-    precision=0,
+    extractor=value_as_short_enum,
 )
 
-SoftwareUpdateInstallSensor = _scalar_sensor(
-    signal=SIGNAL_SOFTWARE_UPDATE_INSTALL_PCT,
-    suffix="software_update_install_telemetry",
-    name="Software update install",
+# HvacSteeringWheelHeatLevel is claimed: _number_or_enum resolves whichever
+# arm the car actually sent, a transform the generic path can't express.
+HvacSteeringWheelHeatLevelSensor = _scalar_sensor(
+    signal="HvacSteeringWheelHeatLevel",
+    suffix="steering_wheel_heat_level_telemetry",
+    name="Steering wheel heat level",
     state_class=None,
-    unit=PERCENTAGE,
     precision=0,
+    extractor=_number_or_enum,
 )
 
 
 # ---------------------------------------------------------------------------
-# Powertrain / performance
+# Body / security (claimed — see generic/claimed.py)
 # ---------------------------------------------------------------------------
-MotorStatorTempFrontSensor = _scalar_sensor(
-    signal=SIGNAL_MOTOR_STATOR_TEMP_FRONT,
-    suffix="motor_stator_temp_front_telemetry",
-    name="Front motor stator temperature",
-    device_class=SensorDeviceClass.TEMPERATURE,
-    unit=UnitOfTemperature.CELSIUS,
-    precision=0,
+# SentryMode fans out to this enum sensor plus binary_sensor.py's derived
+# "armed" bool (sentry_armed_telemetry).
+SentryModeStateSensor = _scalar_sensor(
+    signal="SentryMode",
+    suffix="sentry_mode_state_telemetry",
+    name="Sentry mode",
+    state_class=None,
+    extractor=value_as_short_enum,
 )
 
-MotorStatorTempRearSensor = _scalar_sensor(
-    signal=SIGNAL_MOTOR_STATOR_TEMP_REAR,
-    suffix="motor_stator_temp_rear_telemetry",
-    name="Rear motor stator temperature",
-    device_class=SensorDeviceClass.TEMPERATURE,
-    unit=UnitOfTemperature.CELSIUS,
-    precision=0,
-)
-
+# ---------------------------------------------------------------------------
+# Powertrain / performance (claimed — see generic/claimed.py)
+# ---------------------------------------------------------------------------
 ModuleTempMaxSensor = _scalar_sensor(
     signal=SIGNAL_MODULE_TEMP_MAX,
     suffix="battery_module_temp_max_telemetry",

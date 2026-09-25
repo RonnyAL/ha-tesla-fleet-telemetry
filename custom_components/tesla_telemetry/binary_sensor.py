@@ -24,11 +24,9 @@ from homeassistant.helpers.restore_state import RestoreEntity
 
 from .const import (
     DOMAIN,
-    SIGNAL_CHARGE_PORT_DOOR_OPEN,
     SIGNAL_CHARGING_CABLE_TYPE,
     SIGNAL_DETAILED_CHARGE_STATE,
     SIGNAL_DOOR_STATE,
-    SIGNAL_DRIVER_SEAT_OCCUPIED,
     SIGNAL_LOCKED,
     SIGNAL_WINDOW_FRONT_DRIVER,
     SIGNAL_WINDOW_FRONT_PASSENGER,
@@ -41,6 +39,8 @@ from .coordinator import (
     signal_dispatcher_topic,
 )
 from .values import (
+    _hvac_running,
+    _sentry_armed,
     value_as_bool,
     value_as_door_state,
     value_as_enum_name,
@@ -121,16 +121,18 @@ async def async_setup_entry(
             ),
             # Other body / charging
             LockBinarySensor(coordinator),
-            ChargePortBinarySensor(coordinator),
             ChargeCableBinarySensor(coordinator),
             ChargingActiveBinarySensor(coordinator),
-            UserPresentBinarySensor(coordinator),
+            # Claimed — see generic/claimed.py
+            ClimateRunningBinarySensor(coordinator),
+            SentryArmedBinarySensor(coordinator),
+            TpmsSoftWarningBinarySensor(coordinator),
+            TpmsHardWarningBinarySensor(coordinator),
         ]
     )
-    # local patch: extra entities (see local_extras.py)
-    from .local_extras import local_binary_sensor_entities
 
-    async_add_entities(local_binary_sensor_entities(coordinator))
+    factory = hass.data[DOMAIN][entry.entry_id]["generic_factory"]
+    factory.register_platform("binary_sensor", async_add_entities)
 
 
 # ---------------------------------------------------------------------------
@@ -277,14 +279,6 @@ class LockBinarySensor(_BaseTelemetryBinarySensor):
         self._attr_is_on = None if locked is None else not locked
 
 
-ChargePortBinarySensor = _bool_binary_sensor(
-    signal=SIGNAL_CHARGE_PORT_DOOR_OPEN,
-    slug="charge_port_door_open_telemetry",
-    name="Charge port door",
-    device_class=BinarySensorDeviceClass.OPENING,
-)
-
-
 class ChargeCableBinarySensor(_BaseTelemetryBinarySensor):
     """A cable is present whenever ``ChargingCableType`` reports anything
     other than ``Unknown`` / ``SNA`` (Signal Not Available).
@@ -321,14 +315,6 @@ class ChargeCableBinarySensor(_BaseTelemetryBinarySensor):
         self._attr_is_on = name not in ("CableTypeUnknown", "CableTypeSNA")
 
 
-UserPresentBinarySensor = _bool_binary_sensor(
-    signal=SIGNAL_DRIVER_SEAT_OCCUPIED,
-    slug="user_present_telemetry",
-    name="User present",
-    device_class=BinarySensorDeviceClass.OCCUPANCY,
-)
-
-
 class ChargingActiveBinarySensor(_BaseTelemetryBinarySensor):
     """True while the car is actively pulling charge (Charging or Starting)."""
 
@@ -342,3 +328,40 @@ class ChargingActiveBinarySensor(_BaseTelemetryBinarySensor):
 
     def _handle(self, sample: SignalSample) -> None:
         self._attr_is_on = value_charging_active(sample.value)
+
+
+# HvacPower fans out to sensor.py's ClimateStateSensor plus this derived
+# "running" bool — claimed, see generic/claimed.py.
+ClimateRunningBinarySensor = _bool_binary_sensor(
+    signal="HvacPower",
+    slug="hvac_power_telemetry",
+    name="Climate",
+    device_class=BinarySensorDeviceClass.RUNNING,
+    extractor=_hvac_running,
+)
+
+# SentryMode fans out to sensor.py's SentryModeStateSensor plus this derived
+# "armed" bool — claimed, see generic/claimed.py.
+SentryArmedBinarySensor = _bool_binary_sensor(
+    signal="SentryMode",
+    slug="sentry_armed_telemetry",
+    name="Sentry armed",
+    device_class=BinarySensorDeviceClass.SAFETY,
+    extractor=_sentry_armed,
+)
+
+# TpmsSoftWarnings / TpmsHardWarnings are claimed: metadata says enum
+# (TireLocation), curated treats any nonzero ordinal as bool-truthy.
+TpmsSoftWarningBinarySensor = _bool_binary_sensor(
+    signal="TpmsSoftWarnings",
+    slug="tpms_soft_warning_telemetry",
+    name="Tire pressure warning",
+    device_class=BinarySensorDeviceClass.PROBLEM,
+)
+
+TpmsHardWarningBinarySensor = _bool_binary_sensor(
+    signal="TpmsHardWarnings",
+    slug="tpms_hard_warning_telemetry",
+    name="Tire pressure critical",
+    device_class=BinarySensorDeviceClass.PROBLEM,
+)

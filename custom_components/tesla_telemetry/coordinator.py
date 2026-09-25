@@ -53,6 +53,11 @@ def signal_dispatcher_topic(vin: str, name: str) -> str:
     return f"{DOMAIN}.{vin}.{name}"
 
 
+def all_signals_topic(vin: str) -> str:
+    """Dispatcher topic carrying every sample, for the generic factory."""
+    return f"{DOMAIN}.{vin}.*"
+
+
 class TeslaTelemetryCoordinator:
     """Holds the latest sample per signal name for a single vehicle."""
 
@@ -105,6 +110,9 @@ class TeslaTelemetryCoordinator:
         async_dispatcher_send(
             self.hass, signal_dispatcher_topic(self.vin, name), sample
         )
+        async_dispatcher_send(
+            self.hass, all_signals_topic(self.vin), name, sample
+        )
 
     @property
     def lifetime_signals(self) -> int:
@@ -114,6 +122,15 @@ class TeslaTelemetryCoordinator:
 
     def get(self, name: str) -> SignalSample | None:
         return self._samples.get(name)
+
+    def all_samples(self) -> list[tuple[str, SignalSample]]:
+        """Every signal name and its latest sample currently cached.
+
+        Used to replay data that arrived before a subscriber existed — e.g.
+        the generic factory, which only starts seeing new samples once it
+        connects to the dispatcher during setup.
+        """
+        return list(self._samples.items())
 
     def is_stale(self, name: str, *, now: float | None = None) -> bool:
         sample = self._samples.get(name)

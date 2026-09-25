@@ -9,6 +9,8 @@ from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
 from homeassistant.helpers import aiohttp_client, config_entry_oauth2_flow
+from homeassistant.helpers import entity_registry as er
+from homeassistant.helpers.dispatcher import async_dispatcher_connect
 
 from .const import (
     CONF_LAST_SYNC_AT,
@@ -21,7 +23,9 @@ from .const import (
     DEFAULT_REGION,
     DOMAIN,
 )
-from .coordinator import TeslaTelemetryCoordinator
+from .coordinator import TeslaTelemetryCoordinator, all_signals_topic
+from .generic.factory import GenericEntityFactory
+from .migration import async_migrate_unique_ids
 from .receiver import TeslaTelemetryView
 from .services import (
     _fields_fingerprint,
@@ -127,10 +131,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             entry.entry_id,
         )
 
+    factory = GenericEntityFactory(hass, entry, coordinator)
+
     domain_data[entry.entry_id] = {
         "coordinator": coordinator,
         "vin": vin,
         "api": api,
+        "generic_factory": factory,
     }
 
     async_register_services(hass)
@@ -145,6 +152,21 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     if PLATFORMS:
         await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+
+    # Recreate generic entities already in the registry (e.g. a slow signal
+    # like odometer, whose next datum could be hours away), then subscribe
+    # the factory to every future sample so new signals get an entity the
+    # first time the car actually sends them.
+    factory.async_restore_known(er.async_get(hass))
+    entry.async_on_unload(
+        async_dispatcher_connect(
+            hass, all_signals_topic(vin), factory.handle_sample
+        )
+    )
+    # A sample can arrive and be cached between platform setup and this
+    # subscription being wired up. Replay what's cached now that the factory
+    # is listening; `_created` makes this a no-op for anything already handled.
+    factory.replay_cache()
 
     return True
 
@@ -235,11 +257,19 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 
 async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    """Block v1 entries — they used a hand-rolled OAuth flow whose data
-    shape is incompatible with HA's OAuth2 framework. Returning False
-    leaves the entry in a setup-failed state and prompts the user to
-    re-create it (which will go through the new application_credentials
-    flow and obtain an independent grant from Tesla)."""
+    """Migrate an older config entry.
+
+    v1 entries used a hand-rolled OAuth flow whose data shape is
+    incompatible with HA's OAuth2 framework. Returning False leaves the
+    entry in a setup-failed state and prompts the user to re-create it
+    (which will go through the new application_credentials flow and obtain
+    an independent grant from Tesla).
+
+    v2 -> v3 renames legacy entity unique_ids onto the generic naming rule
+    (see migration.py). This runs before async_setup_entry, so the rewrite
+    always completes before any generic entity could claim one of the
+    target ids.
+    """
     if entry.version < 2:
         _LOGGER.error(
             "tesla_telemetry: config entry %s was created against the old "
@@ -250,4 +280,9 @@ async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             entry.version,
         )
         return False
+
+    if entry.version < 3:
+        await async_migrate_unique_ids(hass, entry)
+        hass.config_entries.async_update_entry(entry, version=3)
+
     return True
