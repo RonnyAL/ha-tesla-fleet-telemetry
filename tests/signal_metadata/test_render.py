@@ -12,10 +12,18 @@ from scripts.signal_metadata.reconcile import SignalRecord
 from scripts.signal_metadata.render import render_module
 
 RECORDS = [
-    SignalRecord("VehicleSpeed", 4, "Driving", "real", None, "mph", "speed",
-                 "measurement", None, False, True),
-    SignalRecord("RemoteStartActive", 268, None, None, None, None, None, None,
-                 "2026.32", False, False),
+    SignalRecord(
+        name="VehicleSpeed", field_id=4, category="Driving", value_type="real",
+        enum_name=None, unit="mph", device_class="speed",
+        state_class="measurement", enum_labels=None, min_firmware=None,
+        semi_only=False, documented=True,
+    ),
+    SignalRecord(
+        name="RemoteStartActive", field_id=268, category=None, value_type=None,
+        enum_name=None, unit=None, device_class=None, state_class=None,
+        enum_labels=None, min_firmware="2026.32", semi_only=False,
+        documented=False,
+    ),
 ]
 
 

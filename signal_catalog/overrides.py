@@ -27,6 +27,11 @@ class Override:
     unit: str | None = None
     device_class: str | None = None
     state_class: str | None = None
+    # Display labels for an enum signal, keyed by the proto member name.
+    # Without one, members are stripped and snake_cased. With one, these
+    # values are both the mapping and the HA `options` list — which is what
+    # keeps Gear reporting "P" rather than "p" after genericization.
+    enum_labels: dict[str, str] | None = None
 
 
 OVERRIDES: dict[str, Override] = {
@@ -84,7 +89,12 @@ OVERRIDES: dict[str, Override] = {
     'EstimatedHoursToChargeTermination': Override('h', 'duration', 'measurement'),  # teslemetry
     'ExpectedEnergyPercentAtTripArrival': Override('%', 'battery', 'measurement'),  # teslemetry
     'ForwardCollisionWarning': Override(None, 'enum', None),  # teslemetry
-    'Gear': Override(None, 'enum', None),  # teslemetry
+    'Gear': Override(None, 'enum', None, {
+        "ShiftStateP": "P",
+        "ShiftStateR": "R",
+        "ShiftStateN": "N",
+        "ShiftStateD": "D",
+    }),
     'GpsHeading': Override('°', None, None),  # teslemetry
     'GuestModeMobileAccessState': Override(None, 'enum', None),  # teslemetry
     'HvacFanSpeed': Override('%', None, None),  # teslemetry
