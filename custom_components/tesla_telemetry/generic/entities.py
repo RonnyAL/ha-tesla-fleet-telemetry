@@ -169,7 +169,18 @@ class GenericSensor(_GenericEntity, RestoreSensor):
         if arm in NUMERIC_ARMS:
             self._attr_native_value = value_as_float(value)
             return
-        self._attr_native_value = value_as_string(value)
+        if arm == "string_value":
+            self._attr_native_value = value_as_string(value)
+            return
+        # An arm this entity cannot represent (e.g. boolean_value or
+        # location_value, reserved for GenericBinarySensor/GenericTracker).
+        # Keep the last value: flapping to None on a type change is worse
+        # than a stale reading.
+        _LOGGER.debug(
+            "%s: ignoring datum in arm %s, entity is a sensor",
+            self._signal_name,
+            arm,
+        )
 
 
 class GenericBinarySensor(_GenericEntity, BinarySensorEntity, RestoreEntity):

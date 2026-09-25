@@ -15,6 +15,7 @@ pb = pytest.importorskip("custom_components.tesla_telemetry.proto.vehicle_data_p
 from custom_components.tesla_telemetry.generic.entities import (
     GenericBinarySensor,
     GenericSensor,
+    GenericTracker,
 )
 from custom_components.tesla_telemetry.signal_metadata import SignalMeta
 
@@ -102,3 +103,42 @@ def test_binary_sensor_reads_a_boolean() -> None:
     entity = GenericBinarySensor(_coordinator(), "Locked", _meta())
     entity._handle(_sample(pb.Value(boolean_value=False)))
     assert entity.is_on is False
+
+
+def test_numeric_sensor_keeps_last_value_on_an_unrepresentable_arm() -> None:
+    """Fix round 1: GenericSensor must not overwrite a good reading with the
+    None that value_as_string() returns for an arm it cannot represent.
+
+    boolean_value and location_value are reserved for GenericBinarySensor
+    and GenericTracker respectively; a GenericSensor seeing either (e.g. a
+    signal that changes representation across firmware) must leave the last
+    numeric value in place rather than clobber it.
+    """
+    entity = GenericSensor(_coordinator(), "VehicleSpeed", _meta(unit="mph"))
+    entity._handle(_sample(pb.Value(double_value=42.5)))
+    assert entity.native_value == 42.5
+
+    entity._handle(_sample(pb.Value(boolean_value=True)))
+    assert entity.native_value == 42.5
+    assert entity.available is True
+
+    entity._handle(_sample(pb.Value(
+        location_value=pb.LocationValue(latitude=1.0, longitude=2.0)
+    )))
+    assert entity.native_value == 42.5
+    assert entity.available is True
+
+
+def test_tracker_keeps_last_location_on_an_unrepresentable_arm() -> None:
+    """GenericTracker already behaves correctly; this pins that behaviour."""
+    entity = GenericTracker(_coordinator(), "Location", _meta())
+    entity._handle(_sample(pb.Value(
+        location_value=pb.LocationValue(latitude=1.0, longitude=2.0)
+    )))
+    assert entity.latitude == 1.0
+    assert entity.longitude == 2.0
+
+    entity._handle(_sample(pb.Value(double_value=42.5)))
+    assert entity.latitude == 1.0
+    assert entity.longitude == 2.0
+    assert entity.available is True
