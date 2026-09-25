@@ -10,7 +10,16 @@ signal is claimed:
   transform   a conversion the generic path cannot express
 
 Keep this in step with the curated entities: tests/generic/test_claimed.py
-fails both when a claim is missing and when one is left behind.
+fails both when a claim is missing and when one is left behind — for *every*
+signal that fans out to more than one entity in
+tests/fixtures/legacy_unique_ids.json's `signals` field, which records what
+each entity actually subscribes to at runtime (async_added_to_hass), not
+just its class-level `_signal_name`. That distinction matters: ModuleTempMax
+and ModuleTempMin fan out only because AvgBatteryTempSensor subscribes to
+both alongside their own direct sensors, and AvgBatteryTempSensor has no
+`_signal_name` of its own — a test that counted fan-out from `_signal_name`
+alone would never see that and would silently accept ModuleTempMax/Min
+being dropped from CLAIMED_SIGNALS.
 
 Partition decided in task-1 (.superpowers/sdd/2026-09-25-generic-entities/
 task-1-report.md), from instantiating the real platforms against

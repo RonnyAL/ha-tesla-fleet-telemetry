@@ -26,12 +26,22 @@ def test_every_claimed_signal_is_real() -> None:
 
 
 def test_fan_out_signals_are_claimed() -> None:
-    """A signal feeding more than one curated entity cannot be generic."""
+    """A signal feeding more than one curated entity cannot be generic.
+
+    Counts from the fixture's ``signals`` list (every signal an entity
+    actually subscribes to at runtime), not the legacy single-valued
+    ``signal`` field. ``signal`` is blank for composite/derived entities
+    such as ``AvgBatteryTempSensor`` and both ``device_tracker`` entities, so
+    counting by ``signal`` alone would miss fan-out through them entirely —
+    e.g. ModuleTempMax/ModuleTempMin, which fan out only because
+    ``AvgBatteryTempSensor`` subscribes to both alongside their own direct
+    sensors.
+    """
     data = json.loads(FIXTURE.read_text())
     counts: dict[str, int] = {}
     for value in data.values():
-        if value["signal"]:
-            counts[value["signal"]] = counts.get(value["signal"], 0) + 1
+        for signal in value.get("signals", []):
+            counts[signal] = counts.get(signal, 0) + 1
     fan_out = {s for s, c in counts.items() if c > 1}
     missing = sorted(fan_out - CLAIMED_SIGNALS)
     assert not missing, f"fan-out signals not claimed: {missing}"
