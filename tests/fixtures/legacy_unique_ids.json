@@ -1,0 +1,632 @@
+{
+  "ac_charging_energy_in_telemetry": {
+    "platform": "sensor",
+    "signal": "ACChargingEnergyIn",
+    "signals": [
+      "ACChargingEnergyIn"
+    ]
+  },
+  "ac_charging_power_telemetry": {
+    "platform": "sensor",
+    "signal": "ACChargingPower",
+    "signals": [
+      "ACChargingPower"
+    ]
+  },
+  "arrival_soc_telemetry": {
+    "platform": "sensor",
+    "signal": "ExpectedEnergyPercentAtTripArrival",
+    "signals": [
+      "ExpectedEnergyPercentAtTripArrival"
+    ]
+  },
+  "battery_heater_telemetry": {
+    "platform": "binary_sensor",
+    "signal": "BatteryHeaterOn",
+    "signals": [
+      "BatteryHeaterOn"
+    ]
+  },
+  "battery_level_telemetry": {
+    "platform": "sensor",
+    "signal": "BatteryLevel",
+    "signals": [
+      "BatteryLevel"
+    ]
+  },
+  "battery_module_temp_max_telemetry": {
+    "platform": "sensor",
+    "signal": "ModuleTempMax",
+    "signals": [
+      "ModuleTempMax"
+    ]
+  },
+  "battery_module_temp_min_telemetry": {
+    "platform": "sensor",
+    "signal": "ModuleTempMin",
+    "signals": [
+      "ModuleTempMin"
+    ]
+  },
+  "battery_range_telemetry": {
+    "platform": "sensor",
+    "signal": "EstBatteryRange",
+    "signals": [
+      "EstBatteryRange"
+    ]
+  },
+  "battery_temp_avg_telemetry": {
+    "platform": "sensor",
+    "signal": "",
+    "signals": [
+      "ModuleTempMax",
+      "ModuleTempMin"
+    ]
+  },
+  "cabin_overheat_protection_telemetry": {
+    "platform": "sensor",
+    "signal": "CabinOverheatProtectionMode",
+    "signals": [
+      "CabinOverheatProtectionMode"
+    ]
+  },
+  "charge_amps_telemetry": {
+    "platform": "sensor",
+    "signal": "ChargeAmps",
+    "signals": [
+      "ChargeAmps"
+    ]
+  },
+  "charge_cable_telemetry": {
+    "platform": "binary_sensor",
+    "signal": "ChargingCableType",
+    "signals": [
+      "ChargingCableType"
+    ]
+  },
+  "charge_current_request_telemetry": {
+    "platform": "sensor",
+    "signal": "ChargeCurrentRequest",
+    "signals": [
+      "ChargeCurrentRequest"
+    ]
+  },
+  "charge_limit_soc_telemetry": {
+    "platform": "sensor",
+    "signal": "ChargeLimitSoc",
+    "signals": [
+      "ChargeLimitSoc"
+    ]
+  },
+  "charge_port_cold_weather_mode_telemetry": {
+    "platform": "binary_sensor",
+    "signal": "ChargePortColdWeatherMode",
+    "signals": [
+      "ChargePortColdWeatherMode"
+    ]
+  },
+  "charge_port_door_open_telemetry": {
+    "platform": "binary_sensor",
+    "signal": "ChargePortDoorOpen",
+    "signals": [
+      "ChargePortDoorOpen"
+    ]
+  },
+  "charge_port_latch_telemetry": {
+    "platform": "sensor",
+    "signal": "ChargePortLatch",
+    "signals": [
+      "ChargePortLatch"
+    ]
+  },
+  "charger_phases_telemetry": {
+    "platform": "sensor",
+    "signal": "ChargerPhases",
+    "signals": [
+      "ChargerPhases"
+    ]
+  },
+  "charger_voltage_telemetry": {
+    "platform": "sensor",
+    "signal": "ChargerVoltage",
+    "signals": [
+      "ChargerVoltage"
+    ]
+  },
+  "charging_active_telemetry": {
+    "platform": "binary_sensor",
+    "signal": "DetailedChargeState",
+    "signals": [
+      "DetailedChargeState"
+    ]
+  },
+  "charging_cable_type_telemetry": {
+    "platform": "sensor",
+    "signal": "ChargingCableType",
+    "signals": [
+      "ChargingCableType"
+    ]
+  },
+  "charging_state_telemetry": {
+    "platform": "sensor",
+    "signal": "DetailedChargeState",
+    "signals": [
+      "DetailedChargeState"
+    ]
+  },
+  "climate_keeper_mode_telemetry": {
+    "platform": "sensor",
+    "signal": "ClimateKeeperMode",
+    "signals": [
+      "ClimateKeeperMode"
+    ]
+  },
+  "dc_charging_energy_in_telemetry": {
+    "platform": "sensor",
+    "signal": "DCChargingEnergyIn",
+    "signals": [
+      "DCChargingEnergyIn"
+    ]
+  },
+  "dc_charging_power_telemetry": {
+    "platform": "sensor",
+    "signal": "DCChargingPower",
+    "signals": [
+      "DCChargingPower"
+    ]
+  },
+  "defrost_mode_telemetry": {
+    "platform": "sensor",
+    "signal": "DefrostMode",
+    "signals": [
+      "DefrostMode"
+    ]
+  },
+  "door_front_driver_telemetry": {
+    "platform": "binary_sensor",
+    "signal": "DoorState",
+    "signals": [
+      "DoorState"
+    ]
+  },
+  "door_front_passenger_telemetry": {
+    "platform": "binary_sensor",
+    "signal": "DoorState",
+    "signals": [
+      "DoorState"
+    ]
+  },
+  "door_frunk_telemetry": {
+    "platform": "binary_sensor",
+    "signal": "DoorState",
+    "signals": [
+      "DoorState"
+    ]
+  },
+  "door_rear_driver_telemetry": {
+    "platform": "binary_sensor",
+    "signal": "DoorState",
+    "signals": [
+      "DoorState"
+    ]
+  },
+  "door_rear_passenger_telemetry": {
+    "platform": "binary_sensor",
+    "signal": "DoorState",
+    "signals": [
+      "DoorState"
+    ]
+  },
+  "door_trunk_telemetry": {
+    "platform": "binary_sensor",
+    "signal": "DoorState",
+    "signals": [
+      "DoorState"
+    ]
+  },
+  "energy_remaining_telemetry": {
+    "platform": "sensor",
+    "signal": "EnergyRemaining",
+    "signals": [
+      "EnergyRemaining"
+    ]
+  },
+  "estimated_signal_cost_telemetry": {
+    "capture_error": "RuntimeError: Attribute hass is None for <entity unknown.unknown=unknown>",
+    "platform": "sensor",
+    "signal": "",
+    "signals": []
+  },
+  "fast_charger_present_telemetry": {
+    "platform": "sensor",
+    "signal": "FastChargerPresent",
+    "signals": [
+      "FastChargerPresent"
+    ]
+  },
+  "gear_telemetry": {
+    "platform": "sensor",
+    "signal": "Gear",
+    "signals": [
+      "Gear"
+    ]
+  },
+  "guest_mode_telemetry": {
+    "platform": "binary_sensor",
+    "signal": "GuestModeEnabled",
+    "signals": [
+      "GuestModeEnabled"
+    ]
+  },
+  "hazard_lights_telemetry": {
+    "platform": "binary_sensor",
+    "signal": "LightsHazardsActive",
+    "signals": [
+      "LightsHazardsActive"
+    ]
+  },
+  "homelink_nearby_telemetry": {
+    "platform": "binary_sensor",
+    "signal": "HomelinkNearby",
+    "signals": [
+      "HomelinkNearby"
+    ]
+  },
+  "hvac_left_temp_request_telemetry": {
+    "platform": "sensor",
+    "signal": "HvacLeftTemperatureRequest",
+    "signals": [
+      "HvacLeftTemperatureRequest"
+    ]
+  },
+  "hvac_power_state_telemetry": {
+    "platform": "sensor",
+    "signal": "HvacPower",
+    "signals": [
+      "HvacPower"
+    ]
+  },
+  "hvac_power_telemetry": {
+    "platform": "binary_sensor",
+    "signal": "HvacPower",
+    "signals": [
+      "HvacPower"
+    ]
+  },
+  "hvac_right_temp_request_telemetry": {
+    "platform": "sensor",
+    "signal": "HvacRightTemperatureRequest",
+    "signals": [
+      "HvacRightTemperatureRequest"
+    ]
+  },
+  "inside_temperature_telemetry": {
+    "platform": "sensor",
+    "signal": "InsideTemp",
+    "signals": [
+      "InsideTemp"
+    ]
+  },
+  "lifetime_energy_charged_telemetry": {
+    "platform": "sensor",
+    "signal": "LifetimeEnergyChargedKwh",
+    "signals": [
+      "LifetimeEnergyChargedKwh"
+    ]
+  },
+  "lifetime_energy_regen_telemetry": {
+    "platform": "sensor",
+    "signal": "LifetimeEnergyGainedRegen",
+    "signals": [
+      "LifetimeEnergyGainedRegen"
+    ]
+  },
+  "lifetime_energy_used_telemetry": {
+    "platform": "sensor",
+    "signal": "LifetimeEnergyUsed",
+    "signals": [
+      "LifetimeEnergyUsed"
+    ]
+  },
+  "located_at_favorite_telemetry": {
+    "platform": "binary_sensor",
+    "signal": "LocatedAtFavorite",
+    "signals": [
+      "LocatedAtFavorite"
+    ]
+  },
+  "located_at_home_telemetry": {
+    "platform": "binary_sensor",
+    "signal": "LocatedAtHome",
+    "signals": [
+      "LocatedAtHome"
+    ]
+  },
+  "located_at_work_telemetry": {
+    "platform": "binary_sensor",
+    "signal": "LocatedAtWork",
+    "signals": [
+      "LocatedAtWork"
+    ]
+  },
+  "location_telemetry": {
+    "platform": "device_tracker",
+    "signal": "",
+    "signals": [
+      "Location"
+    ]
+  },
+  "lock_telemetry": {
+    "platform": "binary_sensor",
+    "signal": "Locked",
+    "signals": [
+      "Locked"
+    ]
+  },
+  "miles_to_arrival_telemetry": {
+    "platform": "sensor",
+    "signal": "MilesToArrival",
+    "signals": [
+      "MilesToArrival"
+    ]
+  },
+  "motor_stator_temp_front_telemetry": {
+    "platform": "sensor",
+    "signal": "DiStatorTempF",
+    "signals": [
+      "DiStatorTempF"
+    ]
+  },
+  "motor_stator_temp_rear_telemetry": {
+    "platform": "sensor",
+    "signal": "DiStatorTempR",
+    "signals": [
+      "DiStatorTempR"
+    ]
+  },
+  "nominal_full_pack_energy_telemetry": {
+    "platform": "sensor",
+    "signal": "NominalFullPackEnergyKwh",
+    "signals": [
+      "NominalFullPackEnergyKwh"
+    ]
+  },
+  "odometer_telemetry": {
+    "platform": "sensor",
+    "signal": "Odometer",
+    "signals": [
+      "Odometer"
+    ]
+  },
+  "outside_temperature_telemetry": {
+    "platform": "sensor",
+    "signal": "OutsideTemp",
+    "signals": [
+      "OutsideTemp"
+    ]
+  },
+  "preconditioning_enabled_telemetry": {
+    "platform": "binary_sensor",
+    "signal": "PreconditioningEnabled",
+    "signals": [
+      "PreconditioningEnabled"
+    ]
+  },
+  "rated_range_telemetry": {
+    "platform": "sensor",
+    "signal": "RatedRange",
+    "signals": [
+      "RatedRange"
+    ]
+  },
+  "remote_start_active_telemetry": {
+    "platform": "binary_sensor",
+    "signal": "RemoteStartActive",
+    "signals": [
+      "RemoteStartActive"
+    ]
+  },
+  "route_telemetry": {
+    "platform": "device_tracker",
+    "signal": "",
+    "signals": [
+      "DestinationName",
+      "DestinationLocation"
+    ]
+  },
+  "scheduled_charging_pending_telemetry": {
+    "platform": "binary_sensor",
+    "signal": "ScheduledChargingPending",
+    "signals": [
+      "ScheduledChargingPending"
+    ]
+  },
+  "scheduled_charging_start_telemetry": {
+    "platform": "sensor",
+    "signal": "ScheduledChargingStartTime",
+    "signals": [
+      "ScheduledChargingStartTime"
+    ]
+  },
+  "scheduled_departure_telemetry": {
+    "platform": "sensor",
+    "signal": "ScheduledDepartureTime",
+    "signals": [
+      "ScheduledDepartureTime"
+    ]
+  },
+  "sentry_armed_telemetry": {
+    "platform": "binary_sensor",
+    "signal": "SentryMode",
+    "signals": [
+      "SentryMode"
+    ]
+  },
+  "sentry_mode_state_telemetry": {
+    "platform": "sensor",
+    "signal": "SentryMode",
+    "signals": [
+      "SentryMode"
+    ]
+  },
+  "service_mode_telemetry": {
+    "platform": "binary_sensor",
+    "signal": "ServiceMode",
+    "signals": [
+      "ServiceMode"
+    ]
+  },
+  "signals_received_telemetry": {
+    "capture_error": "RuntimeError: Attribute hass is None for <entity unknown.unknown=unknown>",
+    "platform": "sensor",
+    "signal": "",
+    "signals": []
+  },
+  "soc_telemetry": {
+    "platform": "sensor",
+    "signal": "Soc",
+    "signals": [
+      "Soc"
+    ]
+  },
+  "software_update_download_telemetry": {
+    "platform": "sensor",
+    "signal": "SoftwareUpdateDownloadPercentComplete",
+    "signals": [
+      "SoftwareUpdateDownloadPercentComplete"
+    ]
+  },
+  "software_update_install_telemetry": {
+    "platform": "sensor",
+    "signal": "SoftwareUpdateInstallationPercentComplete",
+    "signals": [
+      "SoftwareUpdateInstallationPercentComplete"
+    ]
+  },
+  "software_version_telemetry": {
+    "platform": "sensor",
+    "signal": "SoftwareUpdateVersion",
+    "signals": [
+      "SoftwareUpdateVersion"
+    ]
+  },
+  "steering_wheel_heat_level_telemetry": {
+    "platform": "sensor",
+    "signal": "HvacSteeringWheelHeatLevel",
+    "signals": [
+      "HvacSteeringWheelHeatLevel"
+    ]
+  },
+  "time_to_arrival_telemetry": {
+    "platform": "sensor",
+    "signal": "MinutesToArrival",
+    "signals": [
+      "MinutesToArrival"
+    ]
+  },
+  "time_to_full_charge_telemetry": {
+    "platform": "sensor",
+    "signal": "TimeToFullCharge",
+    "signals": [
+      "TimeToFullCharge"
+    ]
+  },
+  "tire_pressure_front_left_telemetry": {
+    "platform": "sensor",
+    "signal": "TpmsPressureFl",
+    "signals": [
+      "TpmsPressureFl"
+    ]
+  },
+  "tire_pressure_front_right_telemetry": {
+    "platform": "sensor",
+    "signal": "TpmsPressureFr",
+    "signals": [
+      "TpmsPressureFr"
+    ]
+  },
+  "tire_pressure_rear_left_telemetry": {
+    "platform": "sensor",
+    "signal": "TpmsPressureRl",
+    "signals": [
+      "TpmsPressureRl"
+    ]
+  },
+  "tire_pressure_rear_right_telemetry": {
+    "platform": "sensor",
+    "signal": "TpmsPressureRr",
+    "signals": [
+      "TpmsPressureRr"
+    ]
+  },
+  "tpms_hard_warning_telemetry": {
+    "platform": "binary_sensor",
+    "signal": "TpmsHardWarnings",
+    "signals": [
+      "TpmsHardWarnings"
+    ]
+  },
+  "tpms_soft_warning_telemetry": {
+    "platform": "binary_sensor",
+    "signal": "TpmsSoftWarnings",
+    "signals": [
+      "TpmsSoftWarnings"
+    ]
+  },
+  "user_present_telemetry": {
+    "platform": "binary_sensor",
+    "signal": "DriverSeatOccupied",
+    "signals": [
+      "DriverSeatOccupied"
+    ]
+  },
+  "valet_mode_telemetry": {
+    "platform": "binary_sensor",
+    "signal": "ValetModeEnabled",
+    "signals": [
+      "ValetModeEnabled"
+    ]
+  },
+  "vehicle_speed_telemetry": {
+    "platform": "sensor",
+    "signal": "VehicleSpeed",
+    "signals": [
+      "VehicleSpeed"
+    ]
+  },
+  "window_front_driver_telemetry": {
+    "platform": "binary_sensor",
+    "signal": "FdWindow",
+    "signals": [
+      "FdWindow"
+    ]
+  },
+  "window_front_passenger_telemetry": {
+    "platform": "binary_sensor",
+    "signal": "FpWindow",
+    "signals": [
+      "FpWindow"
+    ]
+  },
+  "window_rear_driver_telemetry": {
+    "platform": "binary_sensor",
+    "signal": "RdWindow",
+    "signals": [
+      "RdWindow"
+    ]
+  },
+  "window_rear_passenger_telemetry": {
+    "platform": "binary_sensor",
+    "signal": "RpWindow",
+    "signals": [
+      "RpWindow"
+    ]
+  },
+  "wiper_heat_telemetry": {
+    "platform": "binary_sensor",
+    "signal": "WiperHeatEnabled",
+    "signals": [
+      "WiperHeatEnabled"
+    ]
+  }
+}
