@@ -291,3 +291,58 @@ def test_replay_cache_does_not_duplicate_a_signal_already_handled_live() -> None
     factory.replay_cache()
 
     assert len(created["sensor"]) == 1
+
+
+async def test_a_sensor_keeps_working_after_an_enum_arm(hass) -> None:
+    """The arm round-trip must survive real Home Assistant, not just _handle.
+
+    HA forbids a unit on an ENUM sensor, so the enum branch swaps the device
+    class and drops the unit. If those are never put back, HA rejects every
+    later numeric state write — and because the write happens inside a
+    dispatcher callback, the exception is swallowed and logged rather than
+    raised. The entity then freezes at its last displayed value while fresh
+    data keeps arriving, which no test calling `_handle` directly can see:
+    `native_value` updates correctly there, it is the state write that dies.
+    """
+    from homeassistant.helpers.dispatcher import async_dispatcher_connect
+    from pytest_homeassistant_custom_component.common import (
+        MockConfigEntry,
+        MockEntityPlatform,
+    )
+
+    from custom_components.tesla_telemetry.const import DOMAIN
+    from custom_components.tesla_telemetry.coordinator import (
+        TeslaTelemetryCoordinator,
+        all_signals_topic,
+    )
+
+    entry = MockConfigEntry(domain=DOMAIN, unique_id=VIN, data={"vin": VIN}, version=3)
+    entry.add_to_hass(hass)
+    coordinator = TeslaTelemetryCoordinator(hass, VIN, "Test")
+    factory = GenericEntityFactory(hass=hass, entry=entry, coordinator=coordinator)
+    platform = MockEntityPlatform(hass, domain="sensor", platform_name=DOMAIN)
+    platform.config_entry = entry
+    factory.register_platform("sensor", platform._async_schedule_add_entities)
+    async_dispatcher_connect(hass, all_signals_topic(VIN), factory.handle_sample)
+
+    # VehicleSpeed carries unit=mph and device_class=speed in the catalog.
+    coordinator.async_publish("VehicleSpeed", pb.Value(double_value=42.5))
+    await hass.async_block_till_done()
+    entity_id = next(
+        e for e in hass.states.async_entity_ids("sensor") if "vehicle_speed" in e
+    )
+    first = hass.states.get(entity_id).state
+
+    coordinator.async_publish("VehicleSpeed", pb.Value(shift_state_value=pb.ShiftStateP))
+    await hass.async_block_till_done()
+
+    coordinator.async_publish("VehicleSpeed", pb.Value(double_value=55.0))
+    await hass.async_block_till_done()
+
+    state = hass.states.get(entity_id)
+    assert state.state != first, (
+        "the sensor stopped updating after an enum arm — HA is rejecting the "
+        "numeric write because device_class is still enum"
+    )
+    assert state.attributes.get("device_class") == "speed"
+    assert state.attributes.get("unit_of_measurement") is not None

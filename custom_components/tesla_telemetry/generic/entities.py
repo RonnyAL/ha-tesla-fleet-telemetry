@@ -152,6 +152,36 @@ class GenericSensor(_GenericEntity, RestoreSensor):
                 self._attr_state_class = SensorStateClass(meta.state_class)
             except ValueError:
                 _LOGGER.debug("unknown state_class %r for %s", meta.state_class, signal)
+        # How this signal presents when it sends the arm its metadata
+        # describes. The enum branch below has to replace all three, because
+        # Home Assistant forbids a unit on an ENUM sensor — so they are kept
+        # here to be put back when a later datum returns to that arm.
+        self._declared = (
+            self._attr_native_unit_of_measurement,
+            getattr(self, "_attr_device_class", None),
+            getattr(self, "_attr_state_class", None),
+        )
+
+    def _restore_declared_presentation(self) -> None:
+        """Undo the enum branch's rewrite.
+
+        Without this a sensor that met a single enum datum kept
+        ``device_class=enum`` and no unit for the rest of its life. Home
+        Assistant then rejects every later numeric state write, the
+        dispatcher swallows the exception, and the entity silently freezes at
+        its last displayed value while fresh data keeps arriving.
+        """
+        # getattr with a default, not a plain read: Home Assistant backs
+        # _attr_device_class with a mangled private attribute, so reading it
+        # on an entity whose metadata never set one raises AttributeError.
+        if getattr(self, "_attr_device_class", None) is self._declared[1]:
+            return
+        (
+            self._attr_native_unit_of_measurement,
+            self._attr_device_class,
+            self._attr_state_class,
+        ) = self._declared
+        self._attr_options = None
 
     # native_value, options and available come from SensorEntity, which
     # already reads the matching _attr_ fields.
@@ -186,6 +216,7 @@ class GenericSensor(_GenericEntity, RestoreSensor):
             )
             return
         if arm in NUMERIC_ARMS:
+            self._restore_declared_presentation()
             self._attr_native_value = value_as_float(value)
             return
         if arm == "string_value":
@@ -205,6 +236,7 @@ class GenericSensor(_GenericEntity, RestoreSensor):
                     self._meta.device_class,
                 )
                 return
+            self._restore_declared_presentation()
             self._attr_native_value = value_as_string(value)
             return
         # An arm this entity cannot represent (e.g. boolean_value or

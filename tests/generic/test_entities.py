@@ -275,3 +275,47 @@ async def test_a_cached_coordinator_sample_wins_over_a_restored_value(hass) -> N
     await entity.async_added_to_hass()
 
     assert entity.is_on is True
+
+
+def test_numeric_presentation_returns_after_an_enum_arm() -> None:
+    """A signal that meets an enum arm once must not stay an enum forever.
+
+    The enum branch has to drop the unit and swap the device class, because
+    Home Assistant forbids a unit on an ENUM sensor. Nothing put them back,
+    so a sensor that saw a single enum datum kept ``device_class=enum`` with
+    no unit for the rest of its life. Home Assistant then rejects every
+    later numeric state write — the exception is swallowed by the dispatcher
+    — and the entity silently freezes at its last displayed value while
+    fresh data keeps arriving, logging an error each time.
+    """
+    meta = _meta(unit="mph", device_class="speed", state_class="measurement")
+    entity = GenericSensor(_coordinator(), "VehicleSpeed", meta)
+
+    entity._handle(_sample(pb.Value(double_value=42.5)))
+    assert entity.device_class == "speed"
+
+    entity._handle(_sample(pb.Value(shift_state_value=pb.ShiftStateP)))
+    assert entity.device_class == "enum"
+    assert entity.native_unit_of_measurement is None
+
+    entity._handle(_sample(pb.Value(double_value=55.0)))
+    assert entity.native_value == 55.0
+    assert entity.device_class == "speed"
+    assert entity.native_unit_of_measurement == "mph"
+    assert entity.state_class == "measurement"
+    assert not entity.options, "stale enum options would still constrain the state"
+
+
+def test_a_signal_with_no_metadata_survives_the_same_round_trip() -> None:
+    """The undocumented signals are the realistic trigger: nobody knows which
+    arm they send, so they are the ones most likely to flip."""
+    entity = GenericSensor(_coordinator(), "LifetimeEnergyChargedKwh",
+                           _meta(unit="kWh", device_class="energy",
+                                 state_class="total_increasing"))
+    entity._handle(_sample(pb.Value(double_value=10.0)))
+    entity._handle(_sample(pb.Value(shift_state_value=pb.ShiftStateD)))
+    entity._handle(_sample(pb.Value(double_value=12.0)))
+    assert entity.native_value == 12.0
+    assert entity.native_unit_of_measurement == "kWh"
+    assert entity.device_class == "energy"
+    assert entity.state_class == "total_increasing"
