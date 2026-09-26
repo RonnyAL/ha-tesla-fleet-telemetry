@@ -777,3 +777,208 @@ def test_every_options_error_key_is_translated() -> None:
         defined = set(json.loads((_dir / name).read_text(encoding="utf-8"))["options"]["error"])
         missing = used - defined
         assert not missing, f"{name}: untranslated options error keys {sorted(missing)}"
+
+
+# ---------------------------------------------------------------------------
+# Final fix wave — Important 1: the per-signal form must not pin the interval
+# just because some *other* field on the signal was edited, or it permanently
+# defeats every future preset for that signal. Mirrors
+# test_editing_a_category_pins_only_what_changed for the signal_edit form.
+# ---------------------------------------------------------------------------
+async def test_editing_a_signal_pins_only_what_changed(hass) -> None:
+    """An untouched interval must not become a pinned override.
+
+    Reproduction from the review: an entry on the `eco` preset, opening
+    InsideTemp (pre-filled 900, eco's Climate interval), changing only
+    minimum_delta and saving used to store
+    `{"interval_seconds": 900, "minimum_delta": 0.5}` — a permanent pin at
+    exactly the value the preset already gave it, so switching presets
+    afterwards no longer moved this signal at all.
+    """
+    config_entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={"vin": VIN, "hostname": "telemetry.example.invalid", "port": 443},
+        options={CONF_INTERVAL_PRESET: "eco"},
+    )
+    config_entry.add_to_hass(hass)
+
+    result = await hass.config_entries.options.async_init(config_entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"next_step_id": "signal"}
+    )
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"signal": "InsideTemp"}
+    )
+    prefilled = result["data_schema"]({})
+    assert prefilled["interval_seconds"] == 900  # eco's Climate interval
+
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {
+            "interval_seconds": prefilled["interval_seconds"],
+            "minimum_delta": 0.5,
+            "resend_interval_seconds": 0,
+            "include_fields": [],
+        },
+    )
+    await hass.config_entries.options.async_configure(
+        result["flow_id"], {"next_step_id": "finish"}
+    )
+
+    stored = config_entry.options[CONF_SIGNAL_OVERRIDES]["InsideTemp"]
+    assert stored == {"minimum_delta": 0.5}
+    assert "interval_seconds" not in stored
+
+    # And the preset must actually still be in control of this signal.
+    from custom_components.tesla_telemetry.firmware import evidence_from_entry
+    from custom_components.tesla_telemetry.signals import resolve_field_policies
+
+    result = await hass.config_entries.options.async_init(config_entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"next_step_id": "preset"}
+    )
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {CONF_INTERVAL_PRESET: "live"}
+    )
+    await hass.config_entries.options.async_configure(
+        result["flow_id"], {"next_step_id": "finish"}
+    )
+
+    policies = resolve_field_policies(config_entry, evidence_from_entry(config_entry))
+    assert policies["InsideTemp"].interval_seconds == 30  # live's Climate interval
+
+
+async def test_editing_a_pinned_signal_keeps_the_pin(hass) -> None:
+    """An unchanged value that was already an explicit pin must stay pinned.
+
+    Not a regression the review flagged, but the direct counterpart of the
+    fix above: resubmitting the same value the form rendered must not be
+    treated as "no explicit choice" when that value was already a genuine
+    pin (as opposed to happening to equal what a preset would give anyway).
+    """
+    config_entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={"vin": VIN, "hostname": "telemetry.example.invalid", "port": 443},
+        options={CONF_SIGNAL_OVERRIDES: {"InsideTemp": {"interval_seconds": 45}}},
+    )
+    config_entry.add_to_hass(hass)
+
+    result = await hass.config_entries.options.async_init(config_entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"next_step_id": "signal"}
+    )
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"signal": "InsideTemp"}
+    )
+    prefilled = result["data_schema"]({})
+    assert prefilled["interval_seconds"] == 45
+
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {
+            "interval_seconds": 45,
+            "minimum_delta": 0.5,  # the actual edit
+            "resend_interval_seconds": 0,
+            "include_fields": [],
+        },
+    )
+    await hass.config_entries.options.async_configure(
+        result["flow_id"], {"next_step_id": "finish"}
+    )
+    stored = config_entry.options[CONF_SIGNAL_OVERRIDES]["InsideTemp"]
+    assert stored["interval_seconds"] == 45
+    assert stored["minimum_delta"] == 0.5
+
+
+# ---------------------------------------------------------------------------
+# Final fix wave — Important 2: the per-signal form's advisory text must read
+# the same pending firmware-evidence stand-in `_pending_policies` uses, not
+# `self.config_entry` directly, or toggling `assume_firmware_support` on the
+# cost step has no visible effect on the signal form until after `finish`.
+# ---------------------------------------------------------------------------
+async def test_signal_form_note_reflects_pending_assume_firmware_support(
+    hass,
+) -> None:
+    config_entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={"vin": VIN, "hostname": "telemetry.example.invalid", "port": 443},
+        options={},
+    )
+    config_entry.add_to_hass(hass)
+
+    result = await hass.config_entries.options.async_init(config_entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"next_step_id": "signal"}
+    )
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"signal": "InsideTemp"}
+    )
+    before = result["description_placeholders"]["notes"]
+    assert "has not yet confirmed firmware" in before
+
+    # Turn assume_firmware_support on via the cost step, without finishing.
+    result = await hass.config_entries.options.async_init(config_entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"next_step_id": "cost"}
+    )
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {
+            CONF_COST_PER_MILLION_SIGNALS: DEFAULT_COST_PER_MILLION_SIGNALS,
+            CONF_ASSUME_FIRMWARE_SUPPORT: True,
+        },
+    )
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"next_step_id": "signal"}
+    )
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"signal": "InsideTemp"}
+    )
+    after = result["description_placeholders"]["notes"]
+
+    assert "has not yet confirmed firmware" not in after
+    assert after != before
+
+
+# ---------------------------------------------------------------------------
+# Final fix wave — M2: a signal the required-delta gate drops entirely from
+# the resolved policies (unproven firmware) must not render as 0 in the
+# category form -- 0 is indistinguishable from "disabled", and typing 0 to
+# actually disable it was previously a no-op because it already matched the
+# rendered default.
+# ---------------------------------------------------------------------------
+async def test_category_form_renders_a_gated_away_signals_stored_pin(hass) -> None:
+    config_entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={"vin": VIN, "hostname": "telemetry.example.invalid", "port": 443},
+        options={
+            CONF_SIGNAL_OVERRIDES: {
+                "SelfDrivingMilesSinceReset": {"interval_seconds": 120}
+            }
+        },
+    )
+    config_entry.add_to_hass(hass)
+
+    result = await hass.config_entries.options.async_init(config_entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"next_step_id": "category"}
+    )
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"category": "safety"}
+    )
+    prefilled = {str(key): key.default() for key in result["data_schema"].schema}
+    # Before the fix this was 0, indistinguishable from "disabled".
+    assert prefilled["SelfDrivingMilesSinceReset"] == 120
+
+    # Disabling it must actually take effect: 0 now differs from what was
+    # rendered, so it is written rather than silently skipped.
+    prefilled["SelfDrivingMilesSinceReset"] = 0
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], prefilled
+    )
+    await hass.config_entries.options.async_configure(
+        result["flow_id"], {"next_step_id": "finish"}
+    )
+    assert config_entry.options[CONF_SIGNAL_OVERRIDES][
+        "SelfDrivingMilesSinceReset"
+    ] == {"interval_seconds": 0}

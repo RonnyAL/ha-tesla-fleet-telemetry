@@ -51,10 +51,9 @@ def category_slug(category: str | None) -> str:
 def _catalog_by_category() -> dict[str, list[str]]:
     """Every catalog signal, grouped by its documented category slug.
 
-    Cached like ``all_catalog_signals()`` in ``signals.py`` — the catalog
-    never changes at runtime, but this was re-grouping and re-sorting all
-    251 signals on every call, twice per category step. Callers only read
-    the returned dict; nothing mutates it.
+    Cached — the catalog never changes at runtime, but this was re-grouping
+    and re-sorting all 251 signals on every call, twice per category step.
+    Callers only read the returned dict; nothing mutates it.
     """
     from .signal_metadata import SIGNALS
 
@@ -149,6 +148,23 @@ class TeslaTelemetryOptionsFlow(OptionsFlow):
             )
         )
 
+    def _pending_entry(self) -> Any:
+        """A read-only stand-in for `self.config_entry` reflecting pending edits.
+
+        `self.working` holds every edit made so far in this flow, including
+        ones (like `assume_firmware_support` on the cost step) that other
+        steps must see immediately rather than only after `finish`. Anything
+        that needs to resolve policies or firmware evidence consistent with
+        the in-progress flow should build it from this stand-in, not from
+        `self.config_entry` directly.
+        """
+
+        class _Pending:
+            data = self.config_entry.data
+            options = self.working
+
+        return _Pending()
+
     def _pending_policies(self) -> dict[str, Any]:
         """Resolve the edits in progress, without saving them.
 
@@ -158,12 +174,7 @@ class TeslaTelemetryOptionsFlow(OptionsFlow):
         entry would show bounds that contradict what `finish` is about to
         push the moment the user toggles it and re-enters this step.
         """
-
-        class _Pending:
-            data = self.config_entry.data
-            options = self.working
-
-        pending = _Pending()
+        pending = self._pending_entry()
         return resolve_field_policies(pending, evidence_from_entry(pending))
 
     # -------------------- steps --------------------
@@ -293,9 +304,18 @@ class TeslaTelemetryOptionsFlow(OptionsFlow):
         """
         names = _catalog_by_category().get(self._category, [])
         effective = self._pending_policies()
+        # A signal the required-delta gate drops from `effective` (unproven
+        # firmware, e.g. SelfDrivingMilesSinceReset) is not the same thing as
+        # a signal with no override at all: falling back to 0 for both makes
+        # a real, non-zero pin indistinguishable from "disabled", and typing
+        # 0 to actually disable it is then a no-op because it matches what
+        # was already rendered. Render the stored pin instead when there is
+        # one.
         rendered = {
             name: (
-                effective[name].interval_seconds if name in effective else 0
+                effective[name].interval_seconds
+                if name in effective
+                else self.overrides.get(name, {}).get("interval_seconds", 0)
             )
             for name in names
         }
@@ -370,7 +390,21 @@ class TeslaTelemetryOptionsFlow(OptionsFlow):
         # with the zeroed-out values. `interval_seconds` is never gated, so
         # it still comes from the resolved policy.
         raw_override = self.overrides.get(name, {})
-        evidence = evidence_from_entry(self.config_entry)
+        # Read from the same pending stand-in `_pending_policies` uses above,
+        # not `self.config_entry` — `assume_firmware_support` can itself be a
+        # pending edit from the cost step, and reading it off the stored
+        # entry would keep showing stale gating notes until `finish`.
+        evidence = evidence_from_entry(self._pending_entry())
+        # What the interval field is about to be pre-filled with. Same M2
+        # fallback as `category_edit`: a signal the required-delta gate drops
+        # from `policies` still renders its stored pin, not 0, or it becomes
+        # indistinguishable from "disabled" and cannot be told apart from an
+        # unchanged submission below.
+        rendered_interval = (
+            current.interval_seconds
+            if current is not None
+            else raw_override.get("interval_seconds", 0)
+        )
 
         if user_input is not None:
             targets = list(user_input.get("include_fields") or [])
@@ -396,7 +430,22 @@ class TeslaTelemetryOptionsFlow(OptionsFlow):
                         name, meta, evidence
                     ),
                 )
-            stored: dict[str, Any] = {"interval_seconds": interval}
+            # Only a value that differs from what the form rendered becomes a
+            # pin — mirroring `interval_seconds`'s three states (0 disabled,
+            # absent inherits the preset, positive pins). Storing whatever
+            # was submitted unconditionally pins the preset's own resolved
+            # value the instant any *other* field on this signal is edited,
+            # permanently defeating every future preset for it (this was
+            # Important 1: an entry on `eco`, opening a signal that had never
+            # been touched, and saving after changing only `minimum_delta`
+            # pinned the preset-resolved interval forever). An unchanged
+            # value that was already an explicit pin stays pinned — it is not
+            # a *new* pin, just a resubmission of an existing one.
+            stored: dict[str, Any] = {}
+            if interval != rendered_interval:
+                stored["interval_seconds"] = interval
+            elif "interval_seconds" in raw_override:
+                stored["interval_seconds"] = raw_override["interval_seconds"]
             delta = user_input.get("minimum_delta")
             if delta:
                 stored["minimum_delta"] = float(delta)
@@ -408,7 +457,7 @@ class TeslaTelemetryOptionsFlow(OptionsFlow):
             return await self.async_step_init()
 
         defaults = {
-            "interval_seconds": current.interval_seconds if current else 0,
+            "interval_seconds": rendered_interval,
             "minimum_delta": raw_override.get("minimum_delta") or 0,
             "resend_interval_seconds": raw_override.get(
                 "resend_interval_seconds"

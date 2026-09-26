@@ -12,22 +12,23 @@ here from six layers, lowest to highest precedence:
   6. The firmware gate — any key the vehicle has not shown it supports is
      removed (firmware.py).
 
-The full catalog of selectable signals is the Tesla ``Field`` proto enum,
-enumerated at runtime so it tracks proto updates with no hardcoded list.
+The full catalog of selectable signals the options flow offers is the 251
+reconciled signals in ``signal_metadata.SIGNALS`` — the raw Tesla ``Field``
+proto enum is a superset of that (it also carries sentinels like
+``Deprecated_1..3`` and ``Experimental_1..15`` that were never reconciled into
+metadata) and has no caller here.
 
 The pure resolver (``resolve_field_policies`` and ``resolve_effective_intervals``)
-and the catalog (``all_catalog_signals``) deliberately avoid Home Assistant
-imports so they can be unit-tested without the HA test harness; the resolver's
-own dependencies on ``presets``, ``firmware`` and ``signal_metadata`` are
-imported lazily for the same reason. The options flow itself (category
-browsing, per-signal tuning) lives in ``options_flow.py``.
+deliberately avoids Home Assistant imports so it can be unit-tested without the
+HA test harness; its own dependencies on ``presets``, ``firmware`` and
+``signal_metadata`` are imported lazily for the same reason. The options flow
+itself (category browsing, per-signal tuning) lives in ``options_flow.py``.
 """
 from __future__ import annotations
 
 import logging
 from collections.abc import Mapping
 from dataclasses import dataclass
-from functools import lru_cache
 from typing import Any
 
 from .const import (
@@ -40,21 +41,6 @@ from .const import (
 )
 
 _LOGGER = logging.getLogger(__name__)
-
-
-@lru_cache(maxsize=1)
-def all_catalog_signals() -> tuple[str, ...]:
-    """Every selectable Tesla signal name, sorted.
-
-    Sourced from the generated ``Field`` proto enum minus the ``Unknown``
-    sentinel (value 0). Cached — the enum never changes at runtime.
-    """
-    # Lazy import keeps the resolver above free of the protobuf dependency.
-    from .proto import vehicle_data_pb2
-
-    field_names = vehicle_data_pb2.Field.keys()
-    names = [n for n in field_names if n != "Unknown"]
-    return tuple(sorted(names))
 
 
 def _coerce_interval(value: Any) -> int | None:
@@ -301,8 +287,12 @@ def resolve_field_policies(
 def resolve_effective_intervals(entry: Any) -> dict[str, int]:
     """The ``{signal: interval}`` view of the resolved config.
 
-    Kept for the coordinator's staleness map and the services module. The
-    interval is never gated on firmware, so this needs no evidence.
+    Has no production callers as of Phase 4 — the coordinator's staleness map
+    and the services module both moved to the gated path
+    (``resolve_field_policies``) instead. Kept as a plain, ungated interval
+    view because it is correct, tested, and a reasonable thing for a future
+    caller (or a test) to want; the interval is never gated on firmware, so
+    this needs no evidence.
     """
     return {
         name: policy.interval_seconds

@@ -229,8 +229,8 @@ Assistant `config/custom_components/` directory and restart.)
 
 Once the integration is running, **Settings → Devices & Services → Tesla
 Fleet Telemetry → Configure** opens a menu rather than one long form — with
-around 270 selectable signals and four settings per signal, a single form
-would be unusable. The menu has five entries:
+251 selectable signals and four settings per signal, a single form would be
+unusable. The menu has five entries:
 
 * **Preset** — apply one of five interval presets (below) in one step.
 * **Browse a category** — one interval field per signal, grouped the way
@@ -274,6 +274,13 @@ Seconds. `default` leaves every signal at its built-in interval, and
 with automations that already call `tesla_telemetry.set_interval_preset`: it
 only pins `Location` and `VehicleSpeed` to 1 second and leaves everything
 else alone.
+
+**Behaviour change on upgrade:** previously, the interval preset was applied
+last and unconditionally, so `high_rate` force-enabled `Location` and
+`VehicleSpeed` and overrode any per-signal setting you had made on them. A
+preset is now a lower layer than a per-signal override, so any explicit
+override on those two signals wins instead. This only affects you if you use
+`high_rate` and also set an explicit override on `Location` or `VehicleSpeed`.
 
 `interval_seconds` is a ceiling, not a poll rate — Tesla pushes a signal the
 moment it changes and never more often than the configured interval. That is

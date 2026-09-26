@@ -209,11 +209,13 @@ DEFAULT_INTERVALS_SECONDS: dict[str, int] = {
     "Version": 21600,
 }
 
-# Curated grouping of the default signals into collapsible sections for the
-# options flow. Every key of DEFAULT_INTERVALS_SECONDS must appear in exactly
-# one category (guarded by tests/test_signals.py). Signals the user adds from
-# the full Tesla catalog that aren't listed here surface under a synthetic
-# "Additional signals" section instead.
+# A curation aid, not data the UI reads: this only backs
+# tests/test_signals.py::test_every_default_signal_is_in_exactly_one_category,
+# which checks that every key of DEFAULT_INTERVALS_SECONDS is placed in
+# exactly one category here. The options flow gets its category grouping from
+# `signal_metadata.SIGNALS[name].category` instead (see
+# `options_flow._catalog_by_category`), so do not go looking here for the
+# renderer that groups the "Browse a category" step — there isn't one.
 # Each local-addition signal goes into an existing section above (no new
 # translation keys needed) — inlined from the removed stopgap module's
 # category table.

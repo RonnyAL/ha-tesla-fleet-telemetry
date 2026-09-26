@@ -27,8 +27,15 @@ def test_every_preset_name_is_accepted(preset: str) -> None:
 
 
 def test_all_five_presets_are_covered() -> None:
-    """Pin the count so a future preset added to PRESETS but not exercised
-    above is caught rather than silently under-tested."""
+    """A tautological count pin, not a coverage guarantee.
+
+    The parametrized test above already iterates `PRESETS` itself, so it
+    re-tests any preset added to `PRESETS` automatically — it cannot be the
+    thing this pin guards against. What this actually catches is a preset
+    added to `PRESETS` without also extending that parametrized test's
+    surrounding assumptions (e.g. a reviewer expecting exactly five names);
+    it is a tripwire to prompt a second look, not proof of coverage.
+    """
     assert len(PRESETS) == 5
 
 

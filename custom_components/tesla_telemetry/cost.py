@@ -69,7 +69,9 @@ def monthly_floor(policies: dict[str, FieldPolicy]) -> float:
     bound leaves it a valid lower bound; overstating it means it is not a bound.
     """
     return sum(
-        _payload_size(policy) * SECONDS_PER_MONTH / max(policy.resend_interval_seconds, policy.interval_seconds)
+        _payload_size(policy)
+        * SECONDS_PER_MONTH
+        / max(policy.resend_interval_seconds, policy.interval_seconds)
         for policy in policies.values()
         if policy.resend_interval_seconds
     )
