@@ -17,6 +17,7 @@ configuration to the vehicle.
 from __future__ import annotations
 
 import copy
+from functools import lru_cache
 from typing import Any
 
 import voluptuous as vol
@@ -46,8 +47,15 @@ def category_slug(category: str | None) -> str:
     return category.lower().replace(" ", "_")
 
 
+@lru_cache(maxsize=1)
 def _catalog_by_category() -> dict[str, list[str]]:
-    """Every catalog signal, grouped by its documented category slug."""
+    """Every catalog signal, grouped by its documented category slug.
+
+    Cached like ``all_catalog_signals()`` in ``signals.py`` — the catalog
+    never changes at runtime, but this was re-grouping and re-sorting all
+    251 signals on every call, twice per category step. Callers only read
+    the returned dict; nothing mutates it.
+    """
     from .signal_metadata import SIGNALS
 
     grouped: dict[str, list[str]] = {}
@@ -71,16 +79,23 @@ def validate_include_fields(
     Three rules. Two are Tesla's; the third — that a target must itself be
     enabled — is ours, because whether an unconfigured field can be
     piggybacked is undocumented and we stay inside what is known.
+
+    The pair rule constrains who a miles-pair member may be included *by*
+    when something is being included — it does not require it to include
+    anything. Applying it to an empty selection made `MilesSinceReset` and
+    `SelfDrivingMilesSinceReset` untunable at all, so it only runs when
+    ``targets`` is non-empty.
     """
     for target in targets:
         if target == signal:
             return "include_self"
         if target not in enabled:
             return "include_disabled"
-    if (signal in _MILES_PAIR) != bool(_MILES_PAIR & set(targets)):
-        return "include_miles_pair"
-    if signal in _MILES_PAIR and set(targets) - _MILES_PAIR:
-        return "include_miles_pair"
+    if targets:
+        if (signal in _MILES_PAIR) != bool(_MILES_PAIR & set(targets)):
+            return "include_miles_pair"
+        if signal in _MILES_PAIR and set(targets) - _MILES_PAIR:
+            return "include_miles_pair"
     return None
 
 
@@ -320,7 +335,8 @@ class TeslaTelemetryOptionsFlow(OptionsFlow):
             self._signal = user_input["signal"]
             return await self.async_step_signal_edit()
         # A plain dropdown: Home Assistant's frontend filters it as the user
-        # types, which is the search this form needs over ~270 entries.
+        # types, which is the search this form needs over the 251-entry
+        # catalog (``len(SIGNALS)``).
         schema = vol.Schema(
             {
                 vol.Required("signal"): selector.SelectSelector(
@@ -343,6 +359,17 @@ class TeslaTelemetryOptionsFlow(OptionsFlow):
         meta = SIGNALS[name]
         policies = self._pending_policies()
         current = policies.get(name)
+        # The raw, un-gated override — not `current`, which is `policies[name]`
+        # *after* the firmware gate has nulled minimum_delta,
+        # resend_interval_seconds and include_fields for a car that hasn't
+        # proven support. Pre-filling from the gated view and then writing
+        # back whatever the form submits would silently delete a value the
+        # user already typed the moment they reopen this step: the resolved
+        # policy shows 0/[] for those three keys, the form pre-fills 0/[],
+        # and submitting that pre-filled form overwrites the stored override
+        # with the zeroed-out values. `interval_seconds` is never gated, so
+        # it still comes from the resolved policy.
+        raw_override = self.overrides.get(name, {})
         evidence = evidence_from_entry(self.config_entry)
 
         if user_input is not None:
@@ -382,12 +409,12 @@ class TeslaTelemetryOptionsFlow(OptionsFlow):
 
         defaults = {
             "interval_seconds": current.interval_seconds if current else 0,
-            "minimum_delta": (current.minimum_delta if current else None) or 0,
-            "resend_interval_seconds": (
-                current.resend_interval_seconds if current else None
+            "minimum_delta": raw_override.get("minimum_delta") or 0,
+            "resend_interval_seconds": raw_override.get(
+                "resend_interval_seconds"
             )
             or 0,
-            "include_fields": list(current.include_fields) if current else [],
+            "include_fields": list(raw_override.get("include_fields") or []),
         }
         return self.async_show_form(
             step_id="signal_edit",
@@ -450,12 +477,19 @@ class TeslaTelemetryOptionsFlow(OptionsFlow):
                 f"{meta.minimum_delta_required} for this field; without one it "
                 f"never reports."
             )
+        # "default" and "recommended" are independent facts Tesla documents
+        # about the same field (e.g. ChargerVoltage: the car already applies
+        # 0.3 *and* Tesla recommends setting one), so both are shown when
+        # both are true. "recommended" and "supported" are mutually
+        # exclusive: "supported" is Tesla's weaker claim — a delta is merely
+        # possible, with no advice either way — so it is only said when
+        # "recommended" was not already the stronger, true claim.
         if meta.minimum_delta_default is not None:
             notes.append(
                 f"The car already applies a default minimum delta of "
                 f"{meta.minimum_delta_default} on recent firmware."
             )
-        elif meta.minimum_delta_recommended:
+        if meta.minimum_delta_recommended:
             notes.append("Tesla recommends setting a minimum delta for this field.")
         elif meta.minimum_delta_supported:
             # Weaker than "recommended": Tesla documents this only as
