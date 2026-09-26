@@ -65,55 +65,32 @@
   "options": {
     "step": {
       "init": {
-        "title": "Telemetry signals",
-        "description": "Configure which signals the vehicle streams and how often. Each value is the minimum seconds between updates for that signal — Tesla emits on change and no more than once per interval, so it's a ceiling for high-churn signals, not a poll. Set a signal to 0 to disable it. Saving re-pushes the config to the car (no bootstrap needed). Leaving everything untouched keeps the built-in defaults.",
-        "sections": {
-          "driving": {
-            "name": "Driving & navigation",
-            "description": "Location, speed, gear, and active-route signals. 0 disables a signal."
-          },
-          "battery": {
-            "name": "Battery & range",
-            "description": "State of charge and range estimates. 0 disables a signal."
-          },
-          "charging": {
-            "name": "Charging",
-            "description": "Charge state, power/energy, cable, and limit signals. 0 disables a signal."
-          },
-          "climate": {
-            "name": "Climate & cabin",
-            "description": "Cabin/outside temperature and HVAC signals. 0 disables a signal."
-          },
-          "body": {
-            "name": "Body & security",
-            "description": "Doors, windows, lock, and seat-occupancy signals. 0 disables a signal."
-          },
-          "software": {
-            "name": "Software update",
-            "description": "Update version and download/install progress. 0 disables a signal."
-          },
-          "powertrain": {
-            "name": "Powertrain & thermal",
-            "description": "Drive-unit and battery-module temperatures. 0 disables a signal."
-          },
-          "additional": {
-            "name": "Additional signals",
-            "description": "Signals you've added from the full catalog. 0 removes a signal."
-          },
-          "add_signals": {
-            "name": "Add signals from the full Tesla catalog",
-            "description": "Pick any signal from the complete Tesla catalog to start streaming it; it appears above with its own interval next time you open this dialog. Note: a signal with no matching entity still streams and counts toward your signal bill, but surfaces only in the ‘Signals received’ breakdown.",
-            "data": {
-              "signals": "Signals to add"
-            }
-          },
-          "cost": {
-            "name": "Signal cost estimate",
-            "description": "Tesla bills per streaming signal (one per data point). This rate drives the ‘Estimated signal cost’ sensor only — it does not change what Tesla charges. The default (≈ 6.67 per million) mirrors Tesla's published US rate of roughly $1 per 150,000 signals.",
-            "data": {
-              "cost_per_million_signals": "Estimated cost per 1,000,000 signals"
-            }
-          }
+        "title": "Telemetry configuration",
+        "description": "Choose what this vehicle streams, how often, and what it costs.",
+        "menu_options": {
+          "preset": "Preset",
+          "category": "Browse a category",
+          "signal": "Find a signal",
+          "cost": "Cost and advanced",
+          "finish": "Save and close"
+        }
+      },
+      "preset": {
+        "title": "Preset",
+        "description": "A preset sets an interval for each of Tesla's signal categories. It retunes signals that are already enabled and never switches new ones on. Your per-signal settings always win over the preset.",
+        "data": {
+          "interval_preset": "Preset"
+        }
+      },
+      "cost": {
+        "title": "Cost and advanced",
+        "description": "Tesla bills per data point. Your selection of {signals} signals sends at most {ceiling} a month, assuming every signal changes at every opportunity — real usage is normally far below that. At least {floor} a month is guaranteed by the resend intervals you have set, which send even when nothing changes.",
+        "data": {
+          "cost_per_million_signals": "Cost per million signals",
+          "assume_firmware_support": "Send newer field options without waiting for the car to confirm support"
+        },
+        "data_description": {
+          "assume_firmware_support": "Minimum delta, resend interval and included fields need recent firmware. They are normally withheld until your car proves it supports them. Only turn this on if you know your firmware version."
         }
       }
     }
@@ -123,6 +100,15 @@
       "options": {
         "na": "North America",
         "eu": "Europe"
+      }
+    },
+    "interval_preset": {
+      "options": {
+        "default": "Default — the built-in intervals",
+        "eco": "Eco — stream sparingly",
+        "balanced": "Balanced",
+        "live": "Live — fast updates while driving",
+        "high_rate": "High rate (legacy) — location and speed at 1s"
       }
     }
   }

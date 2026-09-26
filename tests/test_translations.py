@@ -49,6 +49,20 @@ def _load_const() -> ModuleType:
     return module
 
 
+def _load_presets() -> ModuleType:
+    """Load presets.py under the synthetic package, with no Home Assistant."""
+    _load_const()  # presets.py imports nothing from const, but this seeds _PKG
+    name = f"{_PKG}.presets"
+    if name in sys.modules:
+        return sys.modules[name]
+    spec = importlib.util.spec_from_file_location(name, _DIR / "presets.py")
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
 def _key_paths(node: Any, prefix: str = "") -> set[str]:
     """Every dotted key path in a nested dict (leaf values ignored)."""
     if not isinstance(node, dict):
@@ -85,7 +99,10 @@ def test_selector_block_is_top_level() -> None:
 
 def test_every_selector_translation_key_is_defined() -> None:
     """Each translation_key used by a selector has matching option labels."""
-    source = (_DIR / "config_flow.py").read_text(encoding="utf-8")
+    source = "\n".join(
+        (_DIR / name).read_text(encoding="utf-8")
+        for name in ("config_flow.py", "options_flow.py")
+    )
     used = set(re.findall(r'translation_key="([A-Za-z0-9_]+)"', source))
     assert used, "no selector translation_key found in config_flow.py"
 
@@ -153,10 +170,22 @@ def test_reauth_description_placeholders_are_supplied() -> None:
 
 def test_abort_reasons_used_in_code_are_translated() -> None:
     """Every async_abort(reason=...) in the config flow has a message."""
-    source = (_DIR / "config_flow.py").read_text(encoding="utf-8")
+    source = "\n".join(
+        (_DIR / name).read_text(encoding="utf-8")
+        for name in ("config_flow.py", "options_flow.py")
+    )
     used = set(re.findall(r'async_abort\(\s*reason="([a-z_]+)"', source))
     assert used, "no async_abort reasons found in config_flow.py"
     for path in (_STRINGS, _EN):
         defined = set(_load(path)["config"]["abort"])
         missing = used - defined
         assert not missing, f"{path.name}: untranslated abort reasons {sorted(missing)}"
+
+
+def test_every_preset_has_a_label() -> None:
+    """A preset with no label renders as its raw name in the radio list."""
+    presets = set(_load_presets().PRESETS)
+    for path in (_STRINGS, _EN):
+        options = _load(path)["selector"]["interval_preset"]["options"]
+        missing = presets - set(options)
+        assert not missing, f"{path.name}: presets without a label: {sorted(missing)}"
