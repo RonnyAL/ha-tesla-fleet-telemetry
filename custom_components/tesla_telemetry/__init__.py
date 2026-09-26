@@ -2,17 +2,19 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 
 import aiohttp
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
 from homeassistant.helpers import aiohttp_client, config_entry_oauth2_flow
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 
 from .const import (
+    CONF_FIRMWARE_EVIDENCE,
     CONF_LAST_SYNC_AT,
     CONF_LAST_SYNC_FIELDS_HASH,
     CONF_PRIVATE_KEY_PEM,
@@ -23,7 +25,8 @@ from .const import (
     DEFAULT_REGION,
     DOMAIN,
 )
-from .coordinator import TeslaTelemetryCoordinator, all_signals_topic
+from .coordinator import SignalSample, TeslaTelemetryCoordinator, all_signals_topic
+from .firmware import at_least, proof_from_signals
 from .generic.factory import GenericEntityFactory
 from .migration import async_migrate_unique_ids
 from .receiver import TeslaTelemetryView
@@ -34,6 +37,7 @@ from .services import (
 )
 from .signals import resolve_effective_intervals
 from .tesla_api import TeslaApi
+from .values import value_as_string
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -168,7 +172,62 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # is listening; `_created` makes this a no-op for anything already handled.
     factory.replay_cache()
 
+    entry.async_on_unload(
+        _async_record_firmware_evidence(hass, entry, coordinator)
+    )
+
     return True
+
+
+@callback
+def _async_record_firmware_evidence(
+    hass: HomeAssistant,
+    entry: ConfigEntry,
+    coordinator: TeslaTelemetryCoordinator,
+) -> Callable[[], None]:
+    """Accumulate firmware evidence from the live stream.
+
+    Two things are recorded. The `Version` signal is the vehicle's own claim,
+    which is fast but can overstate — before firmware 2024.44 it reported the
+    available update rather than the installed version. Receipt of any signal
+    with a documented firmware floor is proof, which can only understate: a
+    car cannot send a field its firmware does not have.
+
+    Written to `entry.data`, which is deliberate. An entry update runs the
+    options-change listener, and that re-pushes when the fields fingerprint
+    changed — so the moment proof unlocks a key, the config carrying it reaches
+    the car without the user touching anything. Writes are therefore kept rare:
+    nothing happens unless the evidence actually changed.
+    """
+
+    @callback
+    def _handle(name: str, sample: SignalSample) -> None:
+        stored = dict(entry.data.get(CONF_FIRMWARE_EVIDENCE) or {})
+        updated = dict(stored)
+
+        if name == "Version":
+            reported = value_as_string(sample.value)
+            if reported:
+                updated["reported"] = reported
+
+        incoming = proof_from_signals([name])
+        if incoming is not None:
+            current = stored.get("proven")
+            if current is None or at_least(incoming, current):
+                updated["proven"] = incoming
+
+        if updated == stored:
+            return
+        hass.config_entries.async_update_entry(
+            entry, data={**entry.data, CONF_FIRMWARE_EVIDENCE: updated}
+        )
+        _LOGGER.debug(
+            "tesla_telemetry: firmware evidence for vin=%s is now %s",
+            entry.data.get(CONF_VIN),
+            updated,
+        )
+
+    return async_dispatcher_connect(hass, all_signals_topic(coordinator.vin), _handle)
 
 
 async def _async_options_updated(

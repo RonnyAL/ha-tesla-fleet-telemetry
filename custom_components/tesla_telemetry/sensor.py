@@ -11,6 +11,7 @@ only its functional name (e.g. "Speed").
 from __future__ import annotations
 
 import logging
+import time
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from typing import Any, ClassVar
@@ -49,6 +50,7 @@ from .coordinator import (
     TeslaTelemetryCoordinator,
     signal_dispatcher_topic,
 )
+from .cost import projected_monthly_signals, signals_to_cost
 from .values import (
     _number_or_enum,
     value_as_bool,
@@ -94,6 +96,7 @@ async def async_setup_entry(
             # Signal accounting / estimated cost
             SignalsReceivedSensor(coordinator),
             EstimatedSignalCostSensor(coordinator, entry),
+            ProjectedMonthlyCostSensor(coordinator, entry),
         ]
     )
 
@@ -587,4 +590,56 @@ class EstimatedSignalCostSensor(_SignalStatSensor):
         return {
             "cost_per_million_signals": round(self._rate_per_million, 6),
             "signals_counted": self._coordinator.lifetime_signals,
+        }
+
+
+class ProjectedMonthlyCostSensor(_SignalStatSensor):
+    """What this vehicle's stream costs a month at the rate observed so far.
+
+    A measurement, not a bound: it projects the rate actually seen since this
+    process started. The options form shows the ceiling and floor instead,
+    because those need no history and are available before anything arrives.
+
+    Reports `unknown` rather than zero until there is a window to measure, so
+    it never claims to have measured nothing.
+    """
+
+    _attr_name = "Projected monthly signal cost"
+    _attr_device_class = SensorDeviceClass.MONETARY
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_suggested_display_precision = 2
+    _attr_icon = "mdi:cash-clock"
+
+    def __init__(
+        self, coordinator: TeslaTelemetryCoordinator, entry: ConfigEntry
+    ) -> None:
+        super().__init__(coordinator)
+        self._entry = entry
+        self._attr_unique_id = (
+            f"{coordinator.vin}_projected_monthly_cost_telemetry"
+        )
+
+    @property
+    def native_unit_of_measurement(self) -> str:
+        return (self.hass.config.currency if self.hass else None) or "USD"
+
+    @property
+    def native_value(self) -> float | None:
+        projected = projected_monthly_signals(
+            self._coordinator.signals_since_start,
+            time.time() - self._coordinator.started_at,
+        )
+        if projected is None:
+            return None
+        rate = self._entry.options.get(
+            CONF_COST_PER_MILLION_SIGNALS, DEFAULT_COST_PER_MILLION_SIGNALS
+        )
+        return round(signals_to_cost(projected, rate), 2)
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        window = time.time() - self._coordinator.started_at
+        return {
+            "measurement_window_hours": round(window / 3600, 2),
+            "signals_in_window": self._coordinator.signals_since_start,
         }

@@ -198,6 +198,15 @@ DEFAULT_INTERVALS_SECONDS: dict[str, int] = {
     "LocatedAtFavorite": 5,
     "ServiceMode": 60,
     "LightsHazardsActive": 5,
+    # The installed firmware version. Push-on-change, and firmware moves
+    # monthly, so a 6-hour ceiling costs roughly one signal a month. It earns
+    # its place by telling the firmware gate which per-field keys this car can
+    # honour — and it gets a sensor of its own through the generic path.
+    #
+    # Its category is Vehicle Configuration, so any preset retunes it to 3600.
+    # That is not a regression: at roughly one change a month the ceiling never
+    # binds, so both values cost the same nothing.
+    "Version": 21600,
 }
 
 # Curated grouping of the default signals into collapsible sections for the
@@ -297,6 +306,7 @@ SIGNAL_CATEGORIES: dict[str, list[str]] = {
         SIGNAL_SOFTWARE_UPDATE_VERSION,
         SIGNAL_SOFTWARE_UPDATE_DOWNLOAD_PCT,
         SIGNAL_SOFTWARE_UPDATE_INSTALL_PCT,
+        "Version",
     ],
     "powertrain": [
         SIGNAL_MOTOR_STATOR_TEMP_FRONT,
