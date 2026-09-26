@@ -390,6 +390,18 @@ CONF_PRIVATE_KEY_PEM = "private_key_pem"
 # trust anchor days after the change that caused it.
 CONF_CA_PEM = "ca_pem"
 
+# Firmware support evidence, persisted on entry.data as
+# ``{"reported": str | None, "proven": str | None}``. Stored on `data` rather
+# than `options` deliberately: an entry update runs the options-change
+# listener, which re-pushes when the fields fingerprint changed — so the moment
+# proof unlocks a field key, the config carrying it reaches the car on its own.
+CONF_FIRMWARE_EVIDENCE = "firmware_evidence"
+
+# Per-entry escape hatch: send the newer per-field keys without waiting for the
+# vehicle to demonstrate support. Off by default; the only way to bypass
+# evidence.
+CONF_ASSUME_FIRMWARE_SUPPORT = "assume_firmware_support"
+
 # WebSocket endpoint registered on HA's HTTP server. nginx proxies the
 # vehicle's mTLS WSS connection here after validating the client cert.
 WS_PATH = "/api/tesla_telemetry/ws"
