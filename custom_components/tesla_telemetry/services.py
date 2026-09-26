@@ -147,6 +147,26 @@ def _resolve_policies(entry: ConfigEntry) -> dict[str, FieldPolicy]:
     return resolve_field_policies(entry, evidence_from_entry(entry))
 
 
+def _policy_field_configs(entry: ConfigEntry) -> dict[str, TelemetryFieldConfig]:
+    """The resolved policies as ``TelemetryFieldConfig`` objects.
+
+    Single source of truth for turning a resolved policy into the object
+    Tesla's config body is built from — ``_build_telemetry_config`` and
+    ``_config_fields`` both call this rather than each rebuilding
+    ``TelemetryFieldConfig`` from ``_resolve_policies`` themselves, so the
+    pushed config and the thing that gets fingerprinted cannot drift apart.
+    """
+    return {
+        name: TelemetryFieldConfig(
+            interval_seconds=policy.interval_seconds,
+            minimum_delta=policy.minimum_delta,
+            resend_interval_seconds=policy.resend_interval_seconds,
+            include_fields=list(policy.include_fields),
+        )
+        for name, policy in _resolve_policies(entry).items()
+    }
+
+
 def _config_fields(entry: ConfigEntry) -> dict[str, dict[str, Any]]:
     """The serialised ``fields`` object, and the thing that is fingerprinted.
 
@@ -156,13 +176,8 @@ def _config_fields(entry: ConfigEntry) -> dict[str, dict[str, Any]]:
     changed and never re-pushes.
     """
     return {
-        name: TelemetryFieldConfig(
-            interval_seconds=policy.interval_seconds,
-            minimum_delta=policy.minimum_delta,
-            resend_interval_seconds=policy.resend_interval_seconds,
-            include_fields=list(policy.include_fields),
-        ).to_dict()
-        for name, policy in _resolve_policies(entry).items()
+        name: config.to_dict()
+        for name, config in _policy_field_configs(entry).items()
     }
 
 
@@ -208,15 +223,7 @@ def _build_telemetry_config(entry: ConfigEntry, ca_pem: str) -> TelemetryConfig:
         hostname=entry.data[CONF_HOSTNAME],
         port=int(entry.data[CONF_PORT]),
         ca=ca_pem,
-        fields={
-            name: TelemetryFieldConfig(
-                interval_seconds=policy.interval_seconds,
-                minimum_delta=policy.minimum_delta,
-                resend_interval_seconds=policy.resend_interval_seconds,
-                include_fields=list(policy.include_fields),
-            )
-            for name, policy in _resolve_policies(entry).items()
-        },
+        fields=_policy_field_configs(entry),
     )
 
 

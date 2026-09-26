@@ -9,8 +9,13 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from custom_components.tesla_telemetry.const import CONF_SIGNAL_OVERRIDES
+from custom_components.tesla_telemetry.const import (
+    CONF_HOSTNAME,
+    CONF_PORT,
+    CONF_SIGNAL_OVERRIDES,
+)
 from custom_components.tesla_telemetry.services import (
+    _build_telemetry_config,
     _config_fields,
     _fields_fingerprint,
 )
@@ -100,8 +105,7 @@ def test_a_gated_key_does_not_reach_the_body() -> None:
     """No firmware evidence on the entry, so nothing new is sent."""
     options = {CONF_SIGNAL_OVERRIDES: {"InsideTemp": {"minimum_delta": 0.5}}}
     fields = _config_fields(entry(options=options))
-    assert fields["InsideTemp"] == {"interval_seconds": fields["InsideTemp"]["interval_seconds"]}
-    assert "minimum_delta" not in fields["InsideTemp"]
+    assert set(fields["InsideTemp"]) == {"interval_seconds"}
 
 
 def test_evidence_on_the_entry_lets_a_key_through() -> None:
@@ -109,3 +113,23 @@ def test_evidence_on_the_entry_lets_a_key_through() -> None:
     data = {"firmware_evidence": {"proven": "2026.32"}}
     fields = _config_fields(entry(options=options, data=data))
     assert fields["InsideTemp"]["minimum_delta"] == 0.5
+
+
+def test_build_telemetry_config_and_config_fields_cannot_diverge() -> None:
+    """The pushed body and the fingerprinted body must be the same body.
+
+    Both are built from the same resolved policies; this pins that they stay
+    built through the same construction rather than two copies that happen
+    to agree today. Uses an entry with firmware evidence so at least one
+    field carries more than just ``interval_seconds`` — a default-only entry
+    would pass even if both copies were wrong in the same way.
+    """
+    options = {CONF_SIGNAL_OVERRIDES: {"InsideTemp": {"minimum_delta": 0.5}}}
+    data = {
+        "firmware_evidence": {"proven": "2026.32"},
+        CONF_HOSTNAME: "example.invalid",
+        CONF_PORT: 443,
+    }
+    e = entry(options=options, data=data)
+    cfg = _build_telemetry_config(e, "ca-pem")
+    assert cfg.to_dict()["fields"] == _config_fields(e)

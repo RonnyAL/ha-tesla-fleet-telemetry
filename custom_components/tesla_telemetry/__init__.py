@@ -186,7 +186,12 @@ async def _async_options_updated(
         return
     coordinator: TeslaTelemetryCoordinator = record["coordinator"]
 
-    from .services import _config_fields
+    from .services import (
+        _build_telemetry_config,
+        _config_fields,
+        _stamp_last_sync,
+        entry_ca_pem,
+    )
 
     new_fields = _config_fields(entry)
     coordinator.effective_intervals = {
@@ -216,8 +221,6 @@ async def _async_options_updated(
     api = record.get("api")
     if api is None:
         return
-
-    from .services import _build_telemetry_config, _stamp_last_sync, entry_ca_pem
 
     # entry_ca_pem honours a stored ca_pem override; using the default
     # bundle here would quietly undo a private CA on the next options edit.
