@@ -606,7 +606,7 @@ class ProjectedMonthlyCostSensor(_SignalStatSensor):
 
     _attr_name = "Projected monthly signal cost"
     _attr_device_class = SensorDeviceClass.MONETARY
-    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_state_class = SensorStateClass.TOTAL
     _attr_suggested_display_precision = 2
     _attr_icon = "mdi:cash-clock"
 

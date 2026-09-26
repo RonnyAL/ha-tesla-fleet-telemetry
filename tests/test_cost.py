@@ -9,6 +9,7 @@ from __future__ import annotations
 import pytest
 
 from custom_components.tesla_telemetry.cost import (
+    MIN_PROJECTION_WINDOW_SECONDS,
     SECONDS_PER_MONTH,
     monthly_ceiling,
     monthly_floor,
@@ -96,3 +97,20 @@ def test_the_projection_needs_a_positive_window() -> None:
     """A fresh process has no rate to project, and must not divide by zero."""
     assert projected_monthly_signals(0, 0) is None
     assert projected_monthly_signals(10, -5) is None
+
+
+def test_the_projection_needs_a_minimum_window() -> None:
+    """A sub-threshold window is noise, not a measurement.
+
+    One signal received a fraction of a second after startup would otherwise
+    scale up to an absurd monthly figure — the exact failure mode this floor
+    exists to prevent.
+    """
+    assert projected_monthly_signals(1, 0.5) is None
+    assert (
+        projected_monthly_signals(1, MIN_PROJECTION_WINDOW_SECONDS - 1) is None
+    )
+    assert (
+        projected_monthly_signals(1, MIN_PROJECTION_WINDOW_SECONDS)
+        is not None
+    )

@@ -195,9 +195,14 @@ def _async_record_firmware_evidence(
 
     Written to `entry.data`, which is deliberate. An entry update runs the
     options-change listener, and that re-pushes when the fields fingerprint
-    changed — so the moment proof unlocks a key, the config carrying it reaches
-    the car without the user touching anything. Writes are therefore kept rare:
-    nothing happens unless the evidence actually changed.
+    changed — so once proof unlocks a key, a config that actually uses it
+    reaches the car without the user touching anything. Today that arming is
+    conditional: no default signal carries a required `minimum_delta`, and the
+    default options set none of `minimum_delta`/`resend_interval_seconds`/
+    `include_fields`, so the pushed fingerprint is identical across the whole
+    proof ladder until a user opts into one of those per-field keys. Writes
+    are therefore kept rare regardless: nothing happens unless the evidence
+    actually changed.
     """
 
     @callback
@@ -227,7 +232,18 @@ def _async_record_firmware_evidence(
             updated,
         )
 
-    return async_dispatcher_connect(hass, all_signals_topic(coordinator.vin), _handle)
+    unsub = async_dispatcher_connect(hass, all_signals_topic(coordinator.vin), _handle)
+    # A sample proving firmware support can already be cached on the
+    # coordinator before this subscription exists (the window between
+    # platform setup and this being wired up). Without this replay, a slow
+    # signal's proof would wait for its *next* datum — hours, for some — even
+    # though the self-healing behaviour the gate depends on shouldn't wait on
+    # a signal that may not arrive again today. `_handle` is idempotent
+    # against anything already handled live, since it only writes when the
+    # evidence actually changes.
+    for name, sample in coordinator.all_samples():
+        _handle(name, sample)
+    return unsub
 
 
 async def _async_options_updated(

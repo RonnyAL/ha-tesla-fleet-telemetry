@@ -22,6 +22,16 @@ if TYPE_CHECKING:  # pragma: no cover
 # Tesla bills monthly; 30 days is the convention used throughout.
 SECONDS_PER_MONTH = 2_592_000
 
+# Below this window, a projection is noise rather than a measurement. A
+# handful of signals in the first fraction of a second after startup
+# extrapolates to an absurd monthly figure (observed: ~364,000 in a currency
+# unit, from a single datum in well under a second) that gets written to the
+# recorder on every restart, poisoning long-term statistics for the one
+# sensor whose entire job is to be the honest number. Five minutes is enough
+# runway that even a slow-ish signal's first arrival doesn't read as "no
+# signals yet, therefore free."
+MIN_PROJECTION_WINDOW_SECONDS = 300
+
 
 def _payload_size(policy: FieldPolicy) -> int:
     """Data points per publication: the field itself, plus any it carries.
@@ -77,8 +87,12 @@ def projected_monthly_signals(
 
     Returns None rather than zero for a fresh process: "no measurement" and
     "measured nothing" are different claims and the sensor must not make the
-    second one.
+    second one. The same reasoning extends to a too-short window: a single
+    signal received a fraction of a second after startup would scale up to a
+    wildly overstated monthly rate — noise, not a measurement — so the window
+    has to clear ``MIN_PROJECTION_WINDOW_SECONDS`` before a rate is reported
+    at all.
     """
-    if uptime_seconds <= 0:
+    if uptime_seconds < MIN_PROJECTION_WINDOW_SECONDS:
         return None
     return signals_since_start * SECONDS_PER_MONTH / uptime_seconds
