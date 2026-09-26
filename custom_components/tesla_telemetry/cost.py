@@ -51,9 +51,15 @@ def monthly_floor(policies: dict[str, FieldPolicy]) -> float:
 
     Only signals with a resend interval contribute: everything else is sent
     solely on change, and a signal that never changes is never sent at all.
+
+    `interval_seconds` is a hard cap on send rate, so a resend interval shorter
+    than it cannot physically produce more sends than the interval allows. Tesla
+    does not document how a vehicle resolves that conflict, so this is an
+    inference — but it errs in the only safe direction. Understating a lower
+    bound leaves it a valid lower bound; overstating it means it is not a bound.
     """
     return sum(
-        _payload_size(policy) * SECONDS_PER_MONTH / policy.resend_interval_seconds
+        _payload_size(policy) * SECONDS_PER_MONTH / max(policy.resend_interval_seconds, policy.interval_seconds)
         for policy in policies.values()
         if policy.resend_interval_seconds
     )

@@ -58,12 +58,23 @@ def test_the_floor_is_zero_without_any_resend() -> None:
     assert monthly_floor({"A": FieldPolicy(interval_seconds=1)}) == 0
 
 
+def test_the_floor_is_governed_by_interval_when_resend_is_faster() -> None:
+    """Resend faster than interval cannot exceed interval's hard cap."""
+    policies = {"A": FieldPolicy(interval_seconds=3600, resend_interval_seconds=1)}
+    assert monthly_floor(policies) == SECONDS_PER_MONTH / 3600
+
+
 def test_the_floor_never_exceeds_the_ceiling() -> None:
     policies = {
         "A": FieldPolicy(interval_seconds=60, resend_interval_seconds=3600),
         "B": FieldPolicy(interval_seconds=10, resend_interval_seconds=10),
     }
     assert monthly_floor(policies) <= monthly_ceiling(policies)
+    # Adversarial case: resend faster than interval. Interval is a hard cap.
+    adversarial = {
+        "C": FieldPolicy(interval_seconds=3600, resend_interval_seconds=1)
+    }
+    assert monthly_floor(adversarial) <= monthly_ceiling(adversarial)
 
 
 def test_bounds_of_an_empty_config_are_zero() -> None:
