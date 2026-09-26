@@ -453,7 +453,19 @@ class TeslaTelemetryOptionsFlow(OptionsFlow):
                 stored["resend_interval_seconds"] = resend
             if targets:
                 stored["include_fields"] = targets
-            self.overrides[name] = stored
+            # `stored` can legitimately be `{}` now that an unchanged
+            # `interval_seconds` is omitted (see above) -- and unlike
+            # `category_edit`, this form always assigns a whole dict rather
+            # than one field, so an empty `stored` for a signal that was
+            # never in `self.overrides` before must not create a row at all,
+            # or a no-op visit to any not-currently-enabled signal silently
+            # enables it (`resolve_field_policies` treats a bare `{}` entry
+            # as "enabled, inherit"). An existing row must still be
+            # writable to `{}`, though -- that is how a pinned signal
+            # legitimately reverts to inherit -- so the guard only skips the
+            # write when there was nothing there to begin with.
+            if stored or name in self.overrides:
+                self.overrides[name] = stored
             return await self.async_step_init()
 
         defaults = {

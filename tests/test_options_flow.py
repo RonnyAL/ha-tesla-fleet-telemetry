@@ -982,3 +982,84 @@ async def test_category_form_renders_a_gated_away_signals_stored_pin(hass) -> No
     assert config_entry.options[CONF_SIGNAL_OVERRIDES][
         "SelfDrivingMilesSinceReset"
     ] == {"interval_seconds": 0}
+
+
+# ---------------------------------------------------------------------------
+# Scoped re-review — new breakage from the Important 1 fix above: `stored`
+# can now legitimately be `{}` (nothing differed from what was rendered), and
+# unconditionally assigning it to `self.overrides[name]` silently enables a
+# signal that was previously absent from both DEFAULT_INTERVALS_SECONDS and
+# the overrides -- `resolve_field_policies` reads a bare `{}` override as
+# "enabled, inherit", not "no override at all".
+# ---------------------------------------------------------------------------
+async def test_opening_an_unconfigured_signal_and_saving_unchanged_does_not_enable_it(
+    hass,
+) -> None:
+    """A no-op visit to a not-currently-enabled signal must not turn it on."""
+    config_entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={"vin": VIN, "hostname": "telemetry.example.invalid", "port": 443},
+        options={},
+    )
+    config_entry.add_to_hass(hass)
+
+    result = await hass.config_entries.options.async_init(config_entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"next_step_id": "signal"}
+    )
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"signal": "Hvil"}
+    )
+    prefilled = result["data_schema"]({})
+    assert prefilled["interval_seconds"] == 0  # not currently enabled
+
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], prefilled
+    )
+    await hass.config_entries.options.async_configure(
+        result["flow_id"], {"next_step_id": "finish"}
+    )
+
+    assert "Hvil" not in config_entry.options.get(CONF_SIGNAL_OVERRIDES, {})
+
+    from custom_components.tesla_telemetry.firmware import evidence_from_entry
+    from custom_components.tesla_telemetry.signals import resolve_field_policies
+
+    policies = resolve_field_policies(config_entry, evidence_from_entry(config_entry))
+    assert "Hvil" not in policies
+
+
+async def test_an_existing_override_can_still_be_cleared_to_inherit(hass) -> None:
+    """The guard must not block the legitimate {} write for an existing row.
+
+    A signal that already has an explicit override (even one with no keys
+    left in it, e.g. after clearing every knob back to blank) must still be
+    writable to `{}` -- that is how a pinned signal legitimately reverts to
+    "enabled, inherit from the preset".
+    """
+    config_entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={"vin": VIN, "hostname": "telemetry.example.invalid", "port": 443},
+        options={CONF_SIGNAL_OVERRIDES: {"InsideTemp": {"minimum_delta": 0.5}}},
+    )
+    config_entry.add_to_hass(hass)
+
+    result = await hass.config_entries.options.async_init(config_entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"next_step_id": "signal"}
+    )
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"signal": "InsideTemp"}
+    )
+    prefilled = result["data_schema"]({})
+    # Clear the delta back out -- interval stays whatever was rendered.
+    prefilled["minimum_delta"] = 0
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], prefilled
+    )
+    await hass.config_entries.options.async_configure(
+        result["flow_id"], {"next_step_id": "finish"}
+    )
+
+    # The row is still present (writable), just emptied out.
+    assert config_entry.options[CONF_SIGNAL_OVERRIDES]["InsideTemp"] == {}

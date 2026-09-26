@@ -1,7 +1,8 @@
 # The integration's own runtime requirements, mirrored from manifest.json.
-# Without protobuf, tests/test_signals.py::test_all_catalog_signals_from_proto
-# silently importorskip-s past itself — and that is the only check that the
-# curated signal names actually exist in the vendored Field enum.
+# Without protobuf, tests/test_local_extras_values.py silently
+# importorskip-s past itself rather than failing loudly (other tests that
+# decode real proto Value messages, e.g. tests/test_firmware_evidence_wiring.py
+# and tests/test_staleness.py, import protobuf directly and fail instead).
 cryptography>=42
 protobuf>=4.25,<8
 flatbuffers>=24
