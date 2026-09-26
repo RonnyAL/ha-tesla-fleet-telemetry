@@ -189,7 +189,7 @@ Until this repository is published in the default HACS store, add it as a
 custom repository:
 
 1. HACS → ⋯ → **Custom repositories** → add
-   `https://github.com/johnbr/ha-tesla-fleet-telemetry` as type *Integration*.
+   `https://github.com/RonnyAL/ha-tesla-fleet-telemetry` as type *Integration*.
 2. Install **Tesla Fleet Telemetry**.
 3. Restart Home Assistant.
 
