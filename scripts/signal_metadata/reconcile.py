@@ -60,6 +60,7 @@ class SignalRecord:
     minimum_delta_required: float | None
     minimum_delta_default: float | None
     minimum_delta_recommended: bool
+    minimum_delta_supported: bool
 
 
 def _clean(value: Any) -> str | None:
@@ -120,14 +121,15 @@ def reconcile(
                 override.minimum_delta_required is not None
                 or override.minimum_delta_default is not None
                 or override.minimum_delta_recommended
+                or override.minimum_delta_supported
             )
             if not has_advice:
                 raise ReconcileError(
                     f"{name}: Tesla's description mentions a minimum delta but "
                     f"the overrides table has no entry for it. Transcribe the "
                     f"value by hand into signal_catalog/overrides.py — set "
-                    f"minimum_delta_required, minimum_delta_default, or "
-                    f"minimum_delta_recommended."
+                    f"minimum_delta_required, minimum_delta_default, "
+                    f"minimum_delta_recommended, or minimum_delta_supported."
                 )
 
         records.append(
@@ -152,6 +154,9 @@ def reconcile(
                 ),
                 minimum_delta_recommended=(
                     override.minimum_delta_recommended if override else False
+                ),
+                minimum_delta_supported=(
+                    override.minimum_delta_supported if override else False
                 ),
             )
         )

@@ -25,7 +25,8 @@ bindings actually decoding the stream.
 
 `minimum_delta_*` transcribes Tesla's per-field delta advice: required means
 the field does not report without one, default is the value the car already
-applies itself, and recommended means Tesla advises one but names no value.
+applies itself, recommended means Tesla advises one but names no value, and
+supported means Tesla says a delta is possible but gives no advice either way.
 """
 from __future__ import annotations
 
@@ -50,6 +51,7 @@ class SignalMeta:
     minimum_delta_required: float | None
     minimum_delta_default: float | None
     minimum_delta_recommended: bool
+    minimum_delta_supported: bool
 
 
 SIGNALS: dict[str, SignalMeta] = {
@@ -77,6 +79,7 @@ def render_module(records: list[SignalRecord]) -> str:
             f"        minimum_delta_required={record.minimum_delta_required!r},\n"
             f"        minimum_delta_default={record.minimum_delta_default!r},\n"
             f"        minimum_delta_recommended={record.minimum_delta_recommended!r},\n"
+            f"        minimum_delta_supported={record.minimum_delta_supported!r},\n"
             f"    ),\n"
         )
     lines.append(_FOOTER)

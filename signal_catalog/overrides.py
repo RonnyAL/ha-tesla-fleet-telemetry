@@ -33,17 +33,20 @@ class Override:
     # keeps Gear reporting "P" rather than "p" after genericization.
     enum_labels: dict[str, str] | None = None
     # Minimum-delta advice, transcribed by hand from Tesla's field
-    # descriptions. Four senses, three fields:
+    # descriptions. Four senses, four fields:
     #
     #   minimum_delta_required     the field does not report at all without it
     #   minimum_delta_default      the value the car already applies itself
     #   minimum_delta_recommended  Tesla advises one but sets no value
+    #   minimum_delta_supported    Tesla says a delta is possible but gives no
+    #                              advice either way
     #
     # The generator fails if a description mentions a minimum delta and none of
     # these is set, so a new case cannot pass unnoticed.
     minimum_delta_required: float | None = None
     minimum_delta_default: float | None = None
     minimum_delta_recommended: bool = False
+    minimum_delta_supported: bool = False
 
 
 OVERRIDES: dict[str, Override] = {
@@ -146,10 +149,11 @@ OVERRIDES: dict[str, Override] = {
     'LifetimeEnergyUsed': Override('kWh', 'energy', 'total_increasing'),  # teslemetry
     'LightsTurnSignal': Override(None, 'enum', None),  # teslemetry
     # "Beginning with firmware version 2025.2.6, specifying minimum delta for
-    # location values is possible. Changes in distance are measured in metres."
+    # location values is possible. Changes in distance are measured in meters."
     # No unit/device_class: Tesla documents the type as Location, and the
-    # reconciler rejects a unit on a non-numeric type.
-    'Location': Override(minimum_delta_recommended=True),
+    # reconciler rejects a unit on a non-numeric type. "is possible" is the
+    # merely-supported sense, not a recommendation.
+    'Location': Override(minimum_delta_supported=True),
     'MilesSinceReset': Override('mi', 'distance', 'total_increasing'),  # teslemetry
     'MilesToArrival': Override('mi', 'distance', 'measurement'),  # teslemetry
     # "The minutes until arriving at the navigation destination."

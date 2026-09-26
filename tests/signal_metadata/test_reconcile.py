@@ -193,8 +193,8 @@ def test_a_field_with_delta_advice_needs_an_override_entry() -> None:
         reconcile(proto, nodes, {})
 
 
-def test_delta_advice_is_satisfied_by_any_of_the_three_attributes() -> None:
-    """Required, Tesla's own default, and 'recommended' all count."""
+def test_delta_advice_is_satisfied_by_any_of_the_four_attributes() -> None:
+    """Required, Tesla's own default, 'recommended', and 'supported' all count."""
     proto = ProtoField(
         ids={"ChargerVoltage": 5}, firmware={}, semi_only=frozenset()
     )
@@ -211,6 +211,7 @@ def test_delta_advice_is_satisfied_by_any_of_the_three_attributes() -> None:
         Override(minimum_delta_required=1.0),
         Override(minimum_delta_default=0.3),
         Override(minimum_delta_recommended=True),
+        Override(minimum_delta_supported=True),
     ):
         records, _ = reconcile(proto, nodes, {"ChargerVoltage": override})
         assert len(records) == 1

@@ -18,7 +18,7 @@ RECORDS = [
         state_class="measurement", enum_labels=None, min_firmware=None,
         semi_only=False, documented=True,
         minimum_delta_required=None, minimum_delta_default=None,
-        minimum_delta_recommended=False,
+        minimum_delta_recommended=False, minimum_delta_supported=False,
     ),
     SignalRecord(
         name="RemoteStartActive", field_id=268, category=None, value_type=None,
@@ -26,7 +26,7 @@ RECORDS = [
         enum_labels=None, min_firmware="2026.32", semi_only=False,
         documented=False,
         minimum_delta_required=None, minimum_delta_default=None,
-        minimum_delta_recommended=False,
+        minimum_delta_recommended=False, minimum_delta_supported=False,
     ),
 ]
 
