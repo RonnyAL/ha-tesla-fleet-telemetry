@@ -92,7 +92,35 @@
         "data_description": {
           "assume_firmware_support": "Minimum delta, resend interval and included fields need recent firmware. They are normally withheld until your car proves it supports them. Only turn this on if you know your firmware version."
         }
+      },
+      "category": {
+        "title": "Browse a category",
+        "description": "Pick one of Tesla's signal categories."
+      },
+      "category_edit": {
+        "title": "{category}",
+        "description": "Minimum seconds between updates for each signal. 0 turns a signal off. Tesla only sends a value when it changes, so a short interval on a rarely-changing signal costs almost nothing."
+      },
+      "signal": {
+        "title": "Find a signal",
+        "description": "Start typing to search the whole catalogue."
+      },
+      "signal_edit": {
+        "title": "{signal}",
+        "description": "Delta is measured in {unit}. {notes}",
+        "data": {
+          "interval_seconds": "Minimum seconds between updates (0 turns it off)",
+          "minimum_delta": "Minimum change before an update is sent (0 for none)",
+          "resend_interval_seconds": "Resend even when unchanged, every N seconds (0 for never)",
+          "include_fields": "Also send these fields in the same payload"
+        }
       }
+    },
+    "error": {
+      "include_self": "A signal cannot include itself.",
+      "include_disabled": "An included field must itself be enabled.",
+      "include_miles_pair": "MilesSinceReset and SelfDrivingMilesSinceReset may only be included by each other.",
+      "resend_shorter_than_interval": "The resend interval cannot be shorter than the signal's own interval."
     }
   },
   "selector": {

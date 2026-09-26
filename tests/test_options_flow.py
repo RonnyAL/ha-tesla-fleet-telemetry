@@ -311,3 +311,273 @@ async def test_cost_step_reflects_pending_assume_firmware_support(hass) -> None:
     expected_signals = 1 * SECONDS_PER_MONTH / 60
     expected_cost = signals_to_cost(expected_signals, DEFAULT_COST_PER_MILLION_SIGNALS)
     assert after == f"{hass.config.currency} {expected_cost:.2f}"
+
+
+async def test_browsing_a_category_lists_its_signals(hass, entry) -> None:
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"next_step_id": "category"}
+    )
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"category": "driving"}
+    )
+    keys = {str(key) for key in result["data_schema"].schema}
+    assert "VehicleSpeed" in keys
+    # Driving only: a Charging signal must not appear here.
+    assert "ChargerVoltage" not in keys
+
+
+async def test_editing_a_category_pins_only_what_changed(hass, entry) -> None:
+    """An untouched row must not become a pinned override."""
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"next_step_id": "category"}
+    )
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"category": "driving"}
+    )
+    submitted = {
+        str(key): key.default() for key in result["data_schema"].schema
+    }
+    submitted["VehicleSpeed"] = 7
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], submitted
+    )
+    await hass.config_entries.options.async_configure(
+        result["flow_id"], {"next_step_id": "finish"}
+    )
+
+    overrides = entry.options[CONF_SIGNAL_OVERRIDES]
+    assert overrides["VehicleSpeed"] == {"interval_seconds": 7}
+    assert "Gear" not in overrides
+
+
+async def test_tuning_one_signal_stores_all_four_knobs(hass, entry) -> None:
+    hass.config_entries.async_update_entry(
+        entry, data={**entry.data, "firmware_evidence": {"proven": "2026.32"}}
+    )
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"next_step_id": "signal"}
+    )
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"signal": "InsideTemp"}
+    )
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {
+            "interval_seconds": 120,
+            "minimum_delta": 0.5,
+            "resend_interval_seconds": 3600,
+            "include_fields": [],
+        },
+    )
+    await hass.config_entries.options.async_configure(
+        result["flow_id"], {"next_step_id": "finish"}
+    )
+    stored = entry.options[CONF_SIGNAL_OVERRIDES]["InsideTemp"]
+    assert stored["interval_seconds"] == 120
+    assert stored["minimum_delta"] == 0.5
+    assert stored["resend_interval_seconds"] == 3600
+
+
+async def test_include_fields_rejects_a_disabled_target(hass, entry) -> None:
+    hass.config_entries.async_update_entry(
+        entry,
+        data={**entry.data, "firmware_evidence": {"proven": "2026.32"}},
+        options={CONF_SIGNAL_OVERRIDES: {"Hvil": {"interval_seconds": 0}}},
+    )
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"next_step_id": "signal"}
+    )
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"signal": "Odometer"}
+    )
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {"interval_seconds": 300, "include_fields": ["Hvil"]},
+    )
+    assert result["type"] is FlowResultType.FORM
+    assert result["errors"] == {"include_fields": "include_disabled"}
+
+
+async def test_include_fields_enforces_the_miles_pair_rule(hass, entry) -> None:
+    """Tesla: these two may only be included by each other."""
+    from custom_components.tesla_telemetry.options_flow import (
+        validate_include_fields,
+    )
+
+    enabled = {"MilesSinceReset", "SelfDrivingMilesSinceReset", "Odometer"}
+    assert (
+        validate_include_fields(
+            "MilesSinceReset", ["SelfDrivingMilesSinceReset"], enabled
+        )
+        is None
+    )
+    assert (
+        validate_include_fields("Odometer", ["MilesSinceReset"], enabled)
+        == "include_miles_pair"
+    )
+    assert (
+        validate_include_fields(
+            "MilesSinceReset", ["Odometer"], enabled
+        )
+        == "include_miles_pair"
+    )
+
+
+async def test_a_signal_cannot_include_itself(hass) -> None:
+    from custom_components.tesla_telemetry.options_flow import (
+        validate_include_fields,
+    )
+
+    assert (
+        validate_include_fields("Odometer", ["Odometer"], {"Odometer"})
+        == "include_self"
+    )
+
+
+async def test_include_fields_accepts_a_valid_selection(hass) -> None:
+    from custom_components.tesla_telemetry.options_flow import (
+        validate_include_fields,
+    )
+
+    assert (
+        validate_include_fields(
+            "Odometer", ["VehicleSpeed"], {"Odometer", "VehicleSpeed"}
+        )
+        is None
+    )
+
+
+async def test_resend_shorter_than_interval_is_rejected(hass, entry) -> None:
+    """A resend the interval can never honour is refused, not silently capped.
+
+    cost.py takes max(resend, interval) to defend its own arithmetic, but the
+    form is where the contradiction should be caught.
+    """
+    hass.config_entries.async_update_entry(
+        entry, data={**entry.data, "firmware_evidence": {"proven": "2026.32"}}
+    )
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"next_step_id": "signal"}
+    )
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"signal": "InsideTemp"}
+    )
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {
+            "interval_seconds": 300,
+            "minimum_delta": 0,
+            "resend_interval_seconds": 60,
+            "include_fields": [],
+        },
+    )
+    assert result["type"] is FlowResultType.FORM
+    assert result["errors"] == {
+        "resend_interval_seconds": "resend_shorter_than_interval"
+    }
+
+
+async def test_a_zero_resend_interval_stays_valid(hass, entry) -> None:
+    """0 means "never resend" and must not trip the shorter-than check."""
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"next_step_id": "signal"}
+    )
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"signal": "InsideTemp"}
+    )
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {
+            "interval_seconds": 30,
+            "minimum_delta": 0,
+            "resend_interval_seconds": 0,
+            "include_fields": [],
+        },
+    )
+    assert result["type"] is FlowResultType.MENU
+
+
+async def test_reentering_category_edit_preserves_the_pending_value(
+    hass, entry
+) -> None:
+    """Re-entering must show the pending value, not what is stored on the entry."""
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"next_step_id": "category"}
+    )
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"category": "driving"}
+    )
+    submitted = {str(key): key.default() for key in result["data_schema"].schema}
+    submitted["VehicleSpeed"] = 9
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], submitted
+    )
+
+    # Re-enter the same category without finishing.
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"next_step_id": "category"}
+    )
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"category": "driving"}
+    )
+    prefilled = {str(key): key.default() for key in result["data_schema"].schema}
+    assert prefilled["VehicleSpeed"] == 9
+
+    # Submitting exactly what the form pre-filled must not discard the edit.
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], prefilled
+    )
+    await hass.config_entries.options.async_configure(
+        result["flow_id"], {"next_step_id": "finish"}
+    )
+    assert entry.options[CONF_SIGNAL_OVERRIDES]["VehicleSpeed"] == {
+        "interval_seconds": 9
+    }
+
+
+async def test_reentering_signal_edit_preserves_the_pending_value(
+    hass, entry
+) -> None:
+    """Re-entering must show the pending value, not what is stored on the entry."""
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"next_step_id": "signal"}
+    )
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"signal": "InsideTemp"}
+    )
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {
+            "interval_seconds": 45,
+            "minimum_delta": 0,
+            "resend_interval_seconds": 0,
+            "include_fields": [],
+        },
+    )
+
+    # Re-enter the same signal without finishing.
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"next_step_id": "signal"}
+    )
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"signal": "InsideTemp"}
+    )
+    prefilled = result["data_schema"]({})
+    assert prefilled["interval_seconds"] == 45
+
+    # Submitting exactly what the form pre-filled must not discard the edit.
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], prefilled
+    )
+    await hass.config_entries.options.async_configure(
+        result["flow_id"], {"next_step_id": "finish"}
+    )
+    assert entry.options[CONF_SIGNAL_OVERRIDES]["InsideTemp"]["interval_seconds"] == 45

@@ -29,6 +29,7 @@ from .const import (
     CONF_INTERVAL_PRESET,
     CONF_SIGNAL_OVERRIDES,
     DEFAULT_COST_PER_MILLION_SIGNALS,
+    SIGNAL_INTERVAL_MAX,
 )
 from .cost import monthly_ceiling, monthly_floor, signals_to_cost
 from .firmware import evidence_from_entry
@@ -38,11 +39,58 @@ from .signals import active_preset, resolve_field_policies, signal_overrides
 MENU_OPTIONS = ["preset", "category", "signal", "cost", "finish"]
 
 
+def category_slug(category: str | None) -> str:
+    """A translation-safe key for one of Tesla's category names."""
+    if category is None:
+        return "uncategorised"
+    return category.lower().replace(" ", "_")
+
+
+def _catalog_by_category() -> dict[str, list[str]]:
+    """Every catalog signal, grouped by its documented category slug."""
+    from .signal_metadata import SIGNALS
+
+    grouped: dict[str, list[str]] = {}
+    for name, meta in SIGNALS.items():
+        grouped.setdefault(category_slug(meta.category), []).append(name)
+    for names in grouped.values():
+        names.sort()
+    return grouped
+
+
+# Tesla: "MilesSinceReset and SelfDrivingMilesSinceReset may only be included
+# by each other."
+_MILES_PAIR = frozenset({"MilesSinceReset", "SelfDrivingMilesSinceReset"})
+
+
+def validate_include_fields(
+    signal: str, targets: list[str], enabled: set[str]
+) -> str | None:
+    """An error key for an invalid include selection, or None.
+
+    Three rules. Two are Tesla's; the third — that a target must itself be
+    enabled — is ours, because whether an unconfigured field can be
+    piggybacked is undocumented and we stay inside what is known.
+    """
+    for target in targets:
+        if target == signal:
+            return "include_self"
+        if target not in enabled:
+            return "include_disabled"
+    if (signal in _MILES_PAIR) != bool(_MILES_PAIR & set(targets)):
+        return "include_miles_pair"
+    if signal in _MILES_PAIR and set(targets) - _MILES_PAIR:
+        return "include_miles_pair"
+    return None
+
+
 class TeslaTelemetryOptionsFlow(OptionsFlow):
     """Menu-driven telemetry configuration."""
 
     def __init__(self) -> None:
         self._working: dict[str, Any] | None = None
+        self._category: str = ""
+        self._signal: str = ""
 
     # -------------------- shared state --------------------
     @property
@@ -193,3 +241,245 @@ class TeslaTelemetryOptionsFlow(OptionsFlow):
         instance's working dict would silently rewrite the saved entry too.
         """
         return self.async_create_entry(title="", data=copy.deepcopy(self.working))
+
+    async def async_step_category(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        grouped = _catalog_by_category()
+        if user_input is not None:
+            self._category = user_input["category"]
+            return await self.async_step_category_edit()
+        options = [
+            selector.SelectOptionDict(
+                value=slug, label=f"{slug.replace('_', ' ').title()} ({len(names)})"
+            )
+            for slug, names in sorted(grouped.items())
+        ]
+        schema = vol.Schema(
+            {
+                vol.Required("category"): selector.SelectSelector(
+                    selector.SelectSelectorConfig(
+                        options=options,
+                        mode=selector.SelectSelectorMode.DROPDOWN,
+                    )
+                )
+            }
+        )
+        return self.async_show_form(step_id="category", data_schema=schema)
+
+    async def async_step_category_edit(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """One interval per signal in the chosen category. 0 disables.
+
+        Only values that differ from what the row was rendered with are
+        stored, so scrolling past a category does not silently pin 56
+        intervals and make every future preset a no-op for them.
+        """
+        names = _catalog_by_category().get(self._category, [])
+        effective = self._pending_policies()
+        rendered = {
+            name: (
+                effective[name].interval_seconds if name in effective else 0
+            )
+            for name in names
+        }
+
+        if user_input is not None:
+            for name in names:
+                submitted = user_input.get(name)
+                if submitted is None or int(submitted) == rendered[name]:
+                    continue
+                self.overrides.setdefault(name, {})["interval_seconds"] = int(
+                    submitted
+                )
+            return await self.async_step_init()
+
+        schema = vol.Schema(
+            {
+                vol.Optional(name, default=rendered[name]): vol.All(
+                    vol.Coerce(int), vol.Range(min=0, max=SIGNAL_INTERVAL_MAX)
+                )
+                for name in names
+            }
+        )
+        return self.async_show_form(
+            step_id="category_edit",
+            data_schema=schema,
+            description_placeholders={
+                "category": self._category.replace("_", " ").title()
+            },
+        )
+
+    async def async_step_signal(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        from .signal_metadata import SIGNALS
+
+        if user_input is not None:
+            self._signal = user_input["signal"]
+            return await self.async_step_signal_edit()
+        # A plain dropdown: Home Assistant's frontend filters it as the user
+        # types, which is the search this form needs over ~270 entries.
+        schema = vol.Schema(
+            {
+                vol.Required("signal"): selector.SelectSelector(
+                    selector.SelectSelectorConfig(
+                        options=sorted(SIGNALS),
+                        mode=selector.SelectSelectorMode.DROPDOWN,
+                        custom_value=False,
+                    )
+                )
+            }
+        )
+        return self.async_show_form(step_id="signal", data_schema=schema)
+
+    async def async_step_signal_edit(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        from .signal_metadata import SIGNALS
+
+        name = self._signal
+        meta = SIGNALS[name]
+        policies = self._pending_policies()
+        current = policies.get(name)
+        evidence = evidence_from_entry(self.config_entry)
+
+        if user_input is not None:
+            targets = list(user_input.get("include_fields") or [])
+            interval = int(user_input["interval_seconds"])
+            resend = int(user_input.get("resend_interval_seconds") or 0)
+            error_field = "include_fields"
+            error = validate_include_fields(name, targets, set(policies))
+            if error is None and resend and resend < interval:
+                # A resend shorter than the interval can never fire: the
+                # interval is how often the vehicle is allowed to send at
+                # all, so a shorter resend is a promise nothing can keep.
+                # cost.py defends its own arithmetic with max(resend,
+                # interval); refusing it here means the number the user
+                # typed is never silently reinterpreted.
+                error = "resend_shorter_than_interval"
+                error_field = "resend_interval_seconds"
+            if error is not None:
+                return self.async_show_form(
+                    step_id="signal_edit",
+                    data_schema=self._signal_schema(name, user_input),
+                    errors={error_field: error},
+                    description_placeholders=self._signal_placeholders(
+                        name, meta, evidence
+                    ),
+                )
+            stored: dict[str, Any] = {"interval_seconds": interval}
+            delta = user_input.get("minimum_delta")
+            if delta:
+                stored["minimum_delta"] = float(delta)
+            if resend:
+                stored["resend_interval_seconds"] = resend
+            if targets:
+                stored["include_fields"] = targets
+            self.overrides[name] = stored
+            return await self.async_step_init()
+
+        defaults = {
+            "interval_seconds": current.interval_seconds if current else 0,
+            "minimum_delta": (current.minimum_delta if current else None) or 0,
+            "resend_interval_seconds": (
+                current.resend_interval_seconds if current else None
+            )
+            or 0,
+            "include_fields": list(current.include_fields) if current else [],
+        }
+        return self.async_show_form(
+            step_id="signal_edit",
+            data_schema=self._signal_schema(name, defaults),
+            description_placeholders=self._signal_placeholders(
+                name, meta, evidence
+            ),
+        )
+
+    def _signal_schema(self, name: str, defaults: dict[str, Any]) -> vol.Schema:
+        from .signal_metadata import SIGNALS
+
+        return vol.Schema(
+            {
+                vol.Required(
+                    "interval_seconds",
+                    default=int(defaults.get("interval_seconds") or 0),
+                ): vol.All(vol.Coerce(int), vol.Range(min=0, max=SIGNAL_INTERVAL_MAX)),
+                vol.Optional(
+                    "minimum_delta",
+                    default=float(defaults.get("minimum_delta") or 0),
+                ): vol.All(vol.Coerce(float), vol.Range(min=0)),
+                vol.Optional(
+                    "resend_interval_seconds",
+                    default=int(defaults.get("resend_interval_seconds") or 0),
+                ): vol.All(vol.Coerce(int), vol.Range(min=0, max=SIGNAL_INTERVAL_MAX)),
+                vol.Optional(
+                    "include_fields",
+                    default=list(defaults.get("include_fields") or []),
+                ): selector.SelectSelector(
+                    selector.SelectSelectorConfig(
+                        options=[s for s in sorted(SIGNALS) if s != name],
+                        multiple=True,
+                        mode=selector.SelectSelectorMode.DROPDOWN,
+                        custom_value=False,
+                    )
+                ),
+            }
+        )
+
+    def _signal_placeholders(
+        self, name: str, meta: Any, evidence: Any
+    ) -> dict[str, str]:
+        """Explain the delta's unit, Tesla's own default, and any gating.
+
+        A blank delta field does not mean "no delta" — the car applies one of
+        its own to ChargerVoltage and Odometer — and a value typed while the
+        floor is unmet is stored but withheld. Both need saying, here, or the
+        setting looks broken.
+        """
+        from .firmware import FLOOR_INCLUDE_FIELDS, FLOOR_MINIMUM_DELTA
+
+        # Tesla measures location deltas in metres; everything else uses the
+        # signal's own unit.
+        unit = "m" if meta.value_type == "Location" else (meta.unit or "")
+        notes: list[str] = []
+        if meta.minimum_delta_required is not None:
+            notes.append(
+                f"Tesla requires a minimum delta of at least "
+                f"{meta.minimum_delta_required} for this field; without one it "
+                f"never reports."
+            )
+        if meta.minimum_delta_default is not None:
+            notes.append(
+                f"The car already applies a default minimum delta of "
+                f"{meta.minimum_delta_default} on recent firmware."
+            )
+        elif meta.minimum_delta_recommended:
+            notes.append("Tesla recommends setting a minimum delta for this field.")
+        elif meta.minimum_delta_supported:
+            # Weaker than "recommended": Tesla documents this only as
+            # possible (e.g. Location — "specifying minimum delta for
+            # location values is possible") and never advises setting one.
+            # Saying "recommends" here would invent vendor guidance Tesla
+            # never gave.
+            notes.append(
+                "Tesla says specifying a minimum delta is possible for this "
+                "field, though it does not recommend one."
+            )
+        if not evidence.supports(FLOOR_MINIMUM_DELTA):
+            notes.append(
+                "Your car has not yet confirmed firmware "
+                f"{FLOOR_MINIMUM_DELTA}, so minimum delta and resend interval "
+                "are stored but not sent until it does."
+            )
+        if not evidence.supports(FLOOR_INCLUDE_FIELDS):
+            notes.append(
+                "Included fields need firmware "
+                f"{FLOOR_INCLUDE_FIELDS}, which your car has not confirmed."
+            )
+        return {
+            "signal": name,
+            "unit": unit or "—",
+            "notes": " ".join(notes) or "No special requirements.",
+        }
