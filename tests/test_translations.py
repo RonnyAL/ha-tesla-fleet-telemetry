@@ -104,7 +104,7 @@ def test_every_selector_translation_key_is_defined() -> None:
         for name in ("config_flow.py", "options_flow.py")
     )
     used = set(re.findall(r'translation_key="([A-Za-z0-9_]+)"', source))
-    assert used, "no selector translation_key found in config_flow.py"
+    assert used, "no selector translation_key found in config_flow.py / options_flow.py"
 
     for path in (_STRINGS, _EN):
         defined = _load(path).get("selector", {})
@@ -186,6 +186,10 @@ def test_every_preset_has_a_label() -> None:
     """A preset with no label renders as its raw name in the radio list."""
     presets = set(_load_presets().PRESETS)
     for path in (_STRINGS, _EN):
-        options = _load(path)["selector"]["interval_preset"]["options"]
+        selectors = _load(path).get("selector", {})
+        assert "interval_preset" in selectors, (
+            f"{path.name}: no 'selector.interval_preset' block"
+        )
+        options = selectors["interval_preset"].get("options", {})
         missing = presets - set(options)
         assert not missing, f"{path.name}: presets without a label: {sorted(missing)}"

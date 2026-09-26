@@ -16,7 +16,7 @@ configuration to the vehicle.
 """
 from __future__ import annotations
 
-import logging
+import copy
 from typing import Any
 
 import voluptuous as vol
@@ -32,10 +32,8 @@ from .const import (
 )
 from .cost import monthly_ceiling, monthly_floor, signals_to_cost
 from .firmware import evidence_from_entry
-from .presets import PRESETS
+from .presets import PRESETS, normalise_preset
 from .signals import active_preset, resolve_field_policies, signal_overrides
-
-_LOGGER = logging.getLogger(__name__)
 
 MENU_OPTIONS = ["preset", "category", "signal", "cost", "finish"]
 
@@ -55,7 +53,15 @@ class TeslaTelemetryOptionsFlow(OptionsFlow):
         not available until Home Assistant has attached it to the flow.
         """
         if self._working is None:
-            stored = dict(self.config_entry.options)
+            # Deep, not shallow: a shallow copy shares nested values (e.g. a
+            # per-signal override dict) with the live entry, so mutating one
+            # in place would write straight into entry.options before
+            # `finish` ever runs — defeating "abandoning the flow persists
+            # nothing" the moment a later step edits a nested value.
+            # `entry.options` itself is a read-only `MappingProxyType`, which
+            # `copy.deepcopy` cannot pickle directly, so it is unwrapped to a
+            # plain dict first; the values underneath are ordinary dicts.
+            stored = copy.deepcopy(dict(self.config_entry.options))
             # Normalise the override shape once, here, so every step below
             # works with dicts and the legacy bare-int form disappears the
             # first time anything is saved.
@@ -81,15 +87,21 @@ class TeslaTelemetryOptionsFlow(OptionsFlow):
         )
 
     def _pending_policies(self) -> dict[str, Any]:
-        """Resolve the edits in progress, without saving them."""
+        """Resolve the edits in progress, without saving them.
+
+        Firmware evidence is read from the same pending stand-in as the
+        policies, not from `self.config_entry` — `assume_firmware_support` is
+        itself a pending edit on the cost step, and reading it off the stored
+        entry would show bounds that contradict what `finish` is about to
+        push the moment the user toggles it and re-enters this step.
+        """
 
         class _Pending:
             data = self.config_entry.data
             options = self.working
 
-        return resolve_field_policies(
-            _Pending(), evidence_from_entry(self.config_entry)
-        )
+        pending = _Pending()
+        return resolve_field_policies(pending, evidence_from_entry(pending))
 
     # -------------------- steps --------------------
     async def async_step_init(
@@ -107,7 +119,16 @@ class TeslaTelemetryOptionsFlow(OptionsFlow):
             {
                 vol.Required(
                     CONF_INTERVAL_PRESET,
-                    default=active_preset(self.config_entry),
+                    # Read the pending choice first: re-entering this step
+                    # after picking a preset but before `finish` must not
+                    # revert to what is stored on the entry, or submitting
+                    # the pre-filled form silently discards the pending
+                    # choice — exactly what a frontend "Save" click does.
+                    default=normalise_preset(
+                        self.working.get(
+                            CONF_INTERVAL_PRESET, active_preset(self.config_entry)
+                        )
+                    ),
                 ): selector.SelectSelector(
                     selector.SelectSelectorConfig(
                         options=list(PRESETS),
@@ -165,6 +186,10 @@ class TeslaTelemetryOptionsFlow(OptionsFlow):
         """Write everything at once.
 
         The entry's update listener re-pushes the telemetry config from here,
-        so this is the only point at which an edit reaches the vehicle.
+        so this is the only point at which an edit reaches the vehicle. A
+        copy is handed over rather than `self.working` itself: HA stores
+        whatever object is passed here directly on `entry.options`, so
+        without the copy a later mutation of this (still-alive) flow
+        instance's working dict would silently rewrite the saved entry too.
         """
-        return self.async_create_entry(title="", data=self.working)
+        return self.async_create_entry(title="", data=copy.deepcopy(self.working))
