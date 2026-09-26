@@ -32,6 +32,18 @@ class Override:
     # values are both the mapping and the HA `options` list — which is what
     # keeps Gear reporting "P" rather than "p" after genericization.
     enum_labels: dict[str, str] | None = None
+    # Minimum-delta advice, transcribed by hand from Tesla's field
+    # descriptions. Four senses, three fields:
+    #
+    #   minimum_delta_required     the field does not report at all without it
+    #   minimum_delta_default      the value the car already applies itself
+    #   minimum_delta_recommended  Tesla advises one but sets no value
+    #
+    # The generator fails if a description mentions a minimum delta and none of
+    # these is set, so a new case cannot pass unnoticed.
+    minimum_delta_required: float | None = None
+    minimum_delta_default: float | None = None
+    minimum_delta_recommended: bool = False
 
 
 OVERRIDES: dict[str, Override] = {
@@ -56,7 +68,12 @@ OVERRIDES: dict[str, Override] = {
     # it replaces.
     'ChargePortDoorOpen': Override(None, 'opening', None),
     'ChargeRateMilePerHour': Override('mph', 'speed', 'measurement'),  # teslemetry
-    'ChargerVoltage': Override('V', 'voltage', 'measurement'),  # teslemetry
+    # "It is recommended to set minimum_delta... Beginning with firmware
+    # version 2025.2.6, minimum_delta is set to 0.3 by default."
+    'ChargerVoltage': Override(
+        'V', 'voltage', 'measurement',  # teslemetry
+        minimum_delta_default=0.3, minimum_delta_recommended=True,
+    ),
     'ChargingCableType': Override(None, 'enum', None),  # teslemetry
     # NOT teslemetry's UnitOfTime.SECONDS/DURATION: Tesla documents this as
     # type 'enum' with proto enum FollowDistance, whose members are
@@ -113,7 +130,12 @@ OVERRIDES: dict[str, Override] = {
     'HvacPower': Override(None, 'enum', None),  # teslemetry
     'HvacRightTemperatureRequest': Override('°C', 'temperature', 'measurement'),  # teslemetry
     'IdealBatteryRange': Override('mi', 'distance', 'measurement'),  # teslemetry
-    'InsideTemp': Override('°C', 'temperature', 'measurement'),  # teslemetry
+    # "This field frequently changes in small increments and setting a
+    # minimum delta is recommended." Tesla sets no value of its own.
+    'InsideTemp': Override(
+        '°C', 'temperature', 'measurement',  # teslemetry
+        minimum_delta_recommended=True,
+    ),
     'LaneDepartureAvoidance': Override(None, 'enum', None),  # teslemetry
     # Undocumented by Tesla, so the generator has no type for it. The unit
     # is in Tesla's own field name (…Kwh), which is a statement rather than
@@ -123,6 +145,11 @@ OVERRIDES: dict[str, Override] = {
     'LifetimeEnergyGainedRegen': Override('kWh', 'energy', 'total_increasing'),  # teslemetry
     'LifetimeEnergyUsed': Override('kWh', 'energy', 'total_increasing'),  # teslemetry
     'LightsTurnSignal': Override(None, 'enum', None),  # teslemetry
+    # "Beginning with firmware version 2025.2.6, specifying minimum delta for
+    # location values is possible. Changes in distance are measured in metres."
+    # No unit/device_class: Tesla documents the type as Location, and the
+    # reconciler rejects a unit on a non-numeric type.
+    'Location': Override(minimum_delta_recommended=True),
     'MilesSinceReset': Override('mi', 'distance', 'total_increasing'),  # teslemetry
     'MilesToArrival': Override('mi', 'distance', 'measurement'),  # teslemetry
     # "The minutes until arriving at the navigation destination."
@@ -141,7 +168,12 @@ OVERRIDES: dict[str, Override] = {
     # is an invalid combination the entity would refuse to add. The curated
     # entity this replaces used 'energy_storage' for exactly this reason.
     'NominalFullPackEnergyKwh': Override('kWh', 'energy_storage', 'measurement'),
-    'Odometer': Override('mi', 'distance', 'total_increasing'),  # teslemetry
+    # "Beginning with firmware version 2025.2.6, the minimum delta for
+    # Odometer is set to 0.1 by default."
+    'Odometer': Override(
+        'mi', 'distance', 'total_increasing',  # teslemetry
+        minimum_delta_default=0.1,
+    ),
     'OutsideTemp': Override('°C', 'temperature', 'measurement'),  # teslemetry
     'PackCurrent': Override('A', 'current', 'measurement'),  # teslemetry
     'PackVoltage': Override('V', 'voltage', 'measurement'),  # teslemetry
@@ -154,7 +186,12 @@ OVERRIDES: dict[str, Override] = {
     'RatedRange': Override('mi', 'distance', 'measurement'),  # teslemetry
     'RouteTrafficMinutesDelay': Override('min', 'duration', 'measurement'),  # teslemetry
     'ScheduledChargingMode': Override(None, 'enum', None),  # teslemetry
-    'SelfDrivingMilesSinceReset': Override('mi', 'distance', 'total_increasing'),  # teslemetry
+    # "This field requires minimum_delta to be explicitly set to a value >= 1"
+    # — without one it never reports at all.
+    'SelfDrivingMilesSinceReset': Override(
+        'mi', 'distance', 'total_increasing',  # teslemetry
+        minimum_delta_required=1.0,
+    ),
     'SentryMode': Override(None, 'enum', None),  # teslemetry
     'Soc': Override('%', 'battery', 'measurement'),  # teslemetry
     # "The percent of the software update that has been downloaded."

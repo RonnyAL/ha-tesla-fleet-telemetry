@@ -166,3 +166,87 @@ def test_enum_device_class_on_an_enum_is_still_allowed() -> None:
     stricter rule must not reject them."""
     records, _ = reconcile(PROTO, NODES, {"Locked": Override(None, "enum", None)})
     assert _by_name(records)["Locked"].device_class == "enum"
+
+
+def test_a_field_with_delta_advice_needs_an_override_entry() -> None:
+    """Tesla adding delta advice to a new field must fail the gate, loudly.
+
+    The values are hand-entered; only the detection is automatic. A silent
+    miss would mean a field that needs a delta never gets one.
+    """
+    proto = ProtoField(
+        ids={"ChargerVoltage": 5}, firmware={}, semi_only=frozenset()
+    )
+    nodes = [
+        {
+            "field_name": "ChargerVoltage",
+            "category": "Charging",
+            "type": "real",
+            "proto_enum_name": "",
+            "description": (
+                "It is recommended to set minimum_delta, which is available "
+                "on firmware version 2024.44.32 and later."
+            ),
+        }
+    ]
+    with pytest.raises(ReconcileError, match="minimum delta"):
+        reconcile(proto, nodes, {})
+
+
+def test_delta_advice_is_satisfied_by_any_of_the_three_attributes() -> None:
+    """Required, Tesla's own default, and 'recommended' all count."""
+    proto = ProtoField(
+        ids={"ChargerVoltage": 5}, firmware={}, semi_only=frozenset()
+    )
+    nodes = [
+        {
+            "field_name": "ChargerVoltage",
+            "category": "Charging",
+            "type": "real",
+            "proto_enum_name": "",
+            "description": "It is recommended to set minimum_delta.",
+        }
+    ]
+    for override in (
+        Override(minimum_delta_required=1.0),
+        Override(minimum_delta_default=0.3),
+        Override(minimum_delta_recommended=True),
+    ):
+        records, _ = reconcile(proto, nodes, {"ChargerVoltage": override})
+        assert len(records) == 1
+
+
+def test_the_rule_matches_both_spellings() -> None:
+    """Tesla writes both "minimum_delta" and "minimum delta"."""
+    proto = ProtoField(ids={"InsideTemp": 7}, firmware={}, semi_only=frozenset())
+    nodes = [
+        {
+            "field_name": "InsideTemp",
+            "category": "Climate",
+            "type": "real",
+            "proto_enum_name": "",
+            "description": "…setting a minimum delta is recommended.",
+        }
+    ]
+    with pytest.raises(ReconcileError, match="minimum delta"):
+        reconcile(proto, nodes, {})
+
+
+def test_delta_attributes_reach_the_record() -> None:
+    proto = ProtoField(
+        ids={"SelfDrivingMilesSinceReset": 9}, firmware={}, semi_only=frozenset()
+    )
+    nodes = [
+        {
+            "field_name": "SelfDrivingMilesSinceReset",
+            "category": "Safety",
+            "type": "real",
+            "proto_enum_name": "",
+            "description": "This field requires minimum_delta to be set to >= 1.",
+        }
+    ]
+    override = Override("mi", "distance", "total_increasing", minimum_delta_required=1.0)
+    records, _ = reconcile(proto, nodes, {"SelfDrivingMilesSinceReset": override})
+    assert records[0].minimum_delta_required == 1.0
+    assert records[0].minimum_delta_default is None
+    assert records[0].minimum_delta_recommended is False

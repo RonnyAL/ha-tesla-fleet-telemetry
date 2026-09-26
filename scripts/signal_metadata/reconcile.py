@@ -12,6 +12,7 @@ ScheduledDepartureTime.
 """
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from typing import Any
 
@@ -32,6 +33,11 @@ _NON_NUMERIC_TYPES = frozenset(
     {"boolean", "string", "enum", "Location", "time", "timestamp"}
 )
 
+# Tesla states delta advice in prose, in both spellings. The values are
+# hand-entered in the overrides table; this only detects a field that has
+# advice and no entry, so a new one cannot slip through unnoticed.
+_DELTA_ADVICE_RE = re.compile(r"minimum[ _]delta", re.IGNORECASE)
+
 
 class ReconcileError(Exception):
     """The three inputs cannot be merged into a trustworthy table."""
@@ -51,6 +57,9 @@ class SignalRecord:
     min_firmware: str | None
     semi_only: bool
     documented: bool
+    minimum_delta_required: float | None
+    minimum_delta_default: float | None
+    minimum_delta_recommended: bool
 
 
 def _clean(value: Any) -> str | None:
@@ -105,6 +114,22 @@ def reconcile(
                         f"Tesla documents the type as {value_type!r}"
                     )
 
+        description = _clean(node.get("description")) or ""
+        if _DELTA_ADVICE_RE.search(description):
+            has_advice = override is not None and (
+                override.minimum_delta_required is not None
+                or override.minimum_delta_default is not None
+                or override.minimum_delta_recommended
+            )
+            if not has_advice:
+                raise ReconcileError(
+                    f"{name}: Tesla's description mentions a minimum delta but "
+                    f"the overrides table has no entry for it. Transcribe the "
+                    f"value by hand into signal_catalog/overrides.py — set "
+                    f"minimum_delta_required, minimum_delta_default, or "
+                    f"minimum_delta_recommended."
+                )
+
         records.append(
             SignalRecord(
                 name=name,
@@ -119,6 +144,15 @@ def reconcile(
                 min_firmware=proto.firmware.get(field_id),
                 semi_only=field_id in proto.semi_only,
                 documented=name in documented,
+                minimum_delta_required=(
+                    override.minimum_delta_required if override else None
+                ),
+                minimum_delta_default=(
+                    override.minimum_delta_default if override else None
+                ),
+                minimum_delta_recommended=(
+                    override.minimum_delta_recommended if override else False
+                ),
             )
         )
 

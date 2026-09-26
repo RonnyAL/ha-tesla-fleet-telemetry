@@ -34,6 +34,8 @@ def _meta(**kw) -> SignalMeta:
         "unit": None, "device_class": None, "state_class": None,
         "enum_labels": None, "min_firmware": None, "semi_only": False,
         "documented": True,
+        "minimum_delta_required": None, "minimum_delta_default": None,
+        "minimum_delta_recommended": False,
     }
     base.update(kw)
     return SignalMeta(**base)

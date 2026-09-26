@@ -22,6 +22,10 @@ is useful for the options UI and for validating units.
 `enum_name` names the proto enum but not its members: those are read from the
 live protobuf descriptor, so a proto bump cannot put them out of step with the
 bindings actually decoding the stream.
+
+`minimum_delta_*` transcribes Tesla's per-field delta advice: required means
+the field does not report without one, default is the value the car already
+applies itself, and recommended means Tesla advises one but names no value.
 """
 from __future__ import annotations
 
@@ -43,6 +47,9 @@ class SignalMeta:
     min_firmware: str | None
     semi_only: bool
     documented: bool
+    minimum_delta_required: float | None
+    minimum_delta_default: float | None
+    minimum_delta_recommended: bool
 
 
 SIGNALS: dict[str, SignalMeta] = {
@@ -67,6 +74,9 @@ def render_module(records: list[SignalRecord]) -> str:
             f"        min_firmware={record.min_firmware!r},\n"
             f"        semi_only={record.semi_only!r},\n"
             f"        documented={record.documented!r},\n"
+            f"        minimum_delta_required={record.minimum_delta_required!r},\n"
+            f"        minimum_delta_default={record.minimum_delta_default!r},\n"
+            f"        minimum_delta_recommended={record.minimum_delta_recommended!r},\n"
             f"    ),\n"
         )
     lines.append(_FOOTER)

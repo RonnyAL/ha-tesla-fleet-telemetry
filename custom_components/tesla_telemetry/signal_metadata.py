@@ -13,6 +13,10 @@ is useful for the options UI and for validating units.
 `enum_name` names the proto enum but not its members: those are read from the
 live protobuf descriptor, so a proto bump cannot put them out of step with the
 bindings actually decoding the stream.
+
+`minimum_delta_*` transcribes Tesla's per-field delta advice: required means
+the field does not report without one, default is the value the car already
+applies itself, and recommended means Tesla advises one but names no value.
 """
 from __future__ import annotations
 
@@ -34,6 +38,9 @@ class SignalMeta:
     min_firmware: str | None
     semi_only: bool
     documented: bool
+    minimum_delta_required: float | None
+    minimum_delta_default: float | None
+    minimum_delta_recommended: bool
 
 
 SIGNALS: dict[str, SignalMeta] = {
@@ -49,6 +56,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware=None,
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'ChargeState': SignalMeta(
         field_id=2,
@@ -62,6 +72,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware=None,
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'BmsFullchargecomplete': SignalMeta(
         field_id=3,
@@ -75,6 +88,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware=None,
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'VehicleSpeed': SignalMeta(
         field_id=4,
@@ -88,6 +104,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware=None,
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'Odometer': SignalMeta(
         field_id=5,
@@ -101,6 +120,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware=None,
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=0.1,
+        minimum_delta_recommended=False,
     ),
     'PackVoltage': SignalMeta(
         field_id=6,
@@ -114,6 +136,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware=None,
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'PackCurrent': SignalMeta(
         field_id=7,
@@ -127,6 +152,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware=None,
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'Soc': SignalMeta(
         field_id=8,
@@ -140,6 +168,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware=None,
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'DCDCEnable': SignalMeta(
         field_id=9,
@@ -153,6 +184,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware=None,
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'Gear': SignalMeta(
         field_id=10,
@@ -166,6 +200,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware=None,
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'IsolationResistance': SignalMeta(
         field_id=11,
@@ -179,6 +216,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware=None,
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'PedalPosition': SignalMeta(
         field_id=12,
@@ -192,6 +232,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware=None,
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'BrakePedal': SignalMeta(
         field_id=13,
@@ -205,6 +248,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware=None,
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'DiStateR': SignalMeta(
         field_id=14,
@@ -218,6 +264,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware=None,
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'DiHeatsinkTR': SignalMeta(
         field_id=15,
@@ -231,6 +280,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware=None,
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'DiAxleSpeedR': SignalMeta(
         field_id=16,
@@ -244,6 +296,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware=None,
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'DiTorquemotor': SignalMeta(
         field_id=17,
@@ -257,6 +312,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware=None,
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'DiStatorTempR': SignalMeta(
         field_id=18,
@@ -270,6 +328,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware=None,
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'DiVBatR': SignalMeta(
         field_id=19,
@@ -283,6 +344,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware=None,
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'DiMotorCurrentR': SignalMeta(
         field_id=20,
@@ -296,6 +360,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware=None,
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'Location': SignalMeta(
         field_id=21,
@@ -309,6 +376,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware=None,
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=True,
     ),
     'GpsState': SignalMeta(
         field_id=22,
@@ -322,6 +392,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware=None,
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'GpsHeading': SignalMeta(
         field_id=23,
@@ -335,6 +408,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware=None,
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'NumBrickVoltageMax': SignalMeta(
         field_id=24,
@@ -348,6 +424,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware=None,
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'BrickVoltageMax': SignalMeta(
         field_id=25,
@@ -361,6 +440,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware=None,
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'NumBrickVoltageMin': SignalMeta(
         field_id=26,
@@ -374,6 +456,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware=None,
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'BrickVoltageMin': SignalMeta(
         field_id=27,
@@ -387,6 +472,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware=None,
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'NumModuleTempMax': SignalMeta(
         field_id=28,
@@ -400,6 +488,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware=None,
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'ModuleTempMax': SignalMeta(
         field_id=29,
@@ -413,6 +504,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware=None,
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'NumModuleTempMin': SignalMeta(
         field_id=30,
@@ -426,6 +520,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware=None,
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'ModuleTempMin': SignalMeta(
         field_id=31,
@@ -439,6 +536,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware=None,
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'RatedRange': SignalMeta(
         field_id=32,
@@ -452,6 +552,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware=None,
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'Hvil': SignalMeta(
         field_id=33,
@@ -465,6 +568,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware=None,
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'DCChargingEnergyIn': SignalMeta(
         field_id=34,
@@ -478,6 +584,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware=None,
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'DCChargingPower': SignalMeta(
         field_id=35,
@@ -491,6 +600,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware=None,
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'ACChargingEnergyIn': SignalMeta(
         field_id=36,
@@ -504,6 +616,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware=None,
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'ACChargingPower': SignalMeta(
         field_id=37,
@@ -517,6 +632,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware=None,
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'ChargeLimitSoc': SignalMeta(
         field_id=38,
@@ -530,6 +648,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware=None,
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'FastChargerPresent': SignalMeta(
         field_id=39,
@@ -543,6 +664,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware=None,
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'EstBatteryRange': SignalMeta(
         field_id=40,
@@ -556,6 +680,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware=None,
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'IdealBatteryRange': SignalMeta(
         field_id=41,
@@ -569,6 +696,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware=None,
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'BatteryLevel': SignalMeta(
         field_id=42,
@@ -582,6 +712,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware=None,
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'TimeToFullCharge': SignalMeta(
         field_id=43,
@@ -595,6 +728,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware=None,
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'ScheduledChargingStartTime': SignalMeta(
         field_id=44,
@@ -608,6 +744,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware=None,
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'ScheduledChargingPending': SignalMeta(
         field_id=45,
@@ -621,6 +760,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware=None,
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'ScheduledDepartureTime': SignalMeta(
         field_id=46,
@@ -634,6 +776,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware=None,
         semi_only=False,
         documented=False,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'PreconditioningEnabled': SignalMeta(
         field_id=47,
@@ -647,6 +792,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware=None,
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'ScheduledChargingMode': SignalMeta(
         field_id=48,
@@ -660,6 +808,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware=None,
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'ChargeAmps': SignalMeta(
         field_id=49,
@@ -673,6 +824,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware=None,
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'ChargeEnableRequest': SignalMeta(
         field_id=50,
@@ -686,6 +840,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware=None,
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'ChargerPhases': SignalMeta(
         field_id=51,
@@ -699,6 +856,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware=None,
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'ChargePortColdWeatherMode': SignalMeta(
         field_id=52,
@@ -712,6 +872,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware=None,
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'ChargeCurrentRequest': SignalMeta(
         field_id=53,
@@ -725,6 +888,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware=None,
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'ChargeCurrentRequestMax': SignalMeta(
         field_id=54,
@@ -738,6 +904,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware=None,
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'BatteryHeaterOn': SignalMeta(
         field_id=55,
@@ -751,6 +920,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware=None,
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'NotEnoughPowerToHeat': SignalMeta(
         field_id=56,
@@ -764,6 +936,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware=None,
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'SuperchargerSessionTripPlanner': SignalMeta(
         field_id=57,
@@ -777,6 +952,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware=None,
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'DoorState': SignalMeta(
         field_id=58,
@@ -790,6 +968,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware=None,
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'Locked': SignalMeta(
         field_id=59,
@@ -803,6 +984,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware=None,
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'FdWindow': SignalMeta(
         field_id=60,
@@ -816,6 +1000,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware=None,
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'FpWindow': SignalMeta(
         field_id=61,
@@ -829,6 +1016,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware=None,
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'RdWindow': SignalMeta(
         field_id=62,
@@ -842,6 +1032,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware=None,
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'RpWindow': SignalMeta(
         field_id=63,
@@ -855,6 +1048,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware=None,
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'VehicleName': SignalMeta(
         field_id=64,
@@ -868,6 +1064,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware=None,
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'SentryMode': SignalMeta(
         field_id=65,
@@ -881,6 +1080,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware=None,
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'SpeedLimitMode': SignalMeta(
         field_id=66,
@@ -894,6 +1096,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware=None,
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'CurrentLimitMph': SignalMeta(
         field_id=67,
@@ -907,6 +1112,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware=None,
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'Version': SignalMeta(
         field_id=68,
@@ -920,6 +1128,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware=None,
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'TpmsPressureFl': SignalMeta(
         field_id=69,
@@ -933,6 +1144,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware=None,
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'TpmsPressureFr': SignalMeta(
         field_id=70,
@@ -946,6 +1160,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware=None,
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'TpmsPressureRl': SignalMeta(
         field_id=71,
@@ -959,6 +1176,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware=None,
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'TpmsPressureRr': SignalMeta(
         field_id=72,
@@ -972,6 +1192,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware=None,
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'SemitruckTpmsPressureRe1L0': SignalMeta(
         field_id=73,
@@ -985,6 +1208,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware=None,
         semi_only=True,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'SemitruckTpmsPressureRe1L1': SignalMeta(
         field_id=74,
@@ -998,6 +1224,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware=None,
         semi_only=True,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'SemitruckTpmsPressureRe1R0': SignalMeta(
         field_id=75,
@@ -1011,6 +1240,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware=None,
         semi_only=True,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'SemitruckTpmsPressureRe1R1': SignalMeta(
         field_id=76,
@@ -1024,6 +1256,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware=None,
         semi_only=True,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'SemitruckTpmsPressureRe2L0': SignalMeta(
         field_id=77,
@@ -1037,6 +1272,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware=None,
         semi_only=True,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'SemitruckTpmsPressureRe2L1': SignalMeta(
         field_id=78,
@@ -1050,6 +1288,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware=None,
         semi_only=True,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'SemitruckTpmsPressureRe2R0': SignalMeta(
         field_id=79,
@@ -1063,6 +1304,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware=None,
         semi_only=True,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'SemitruckTpmsPressureRe2R1': SignalMeta(
         field_id=80,
@@ -1076,6 +1320,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware=None,
         semi_only=True,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'TpmsLastSeenPressureTimeFl': SignalMeta(
         field_id=81,
@@ -1089,6 +1336,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware=None,
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'TpmsLastSeenPressureTimeFr': SignalMeta(
         field_id=82,
@@ -1102,6 +1352,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware=None,
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'TpmsLastSeenPressureTimeRl': SignalMeta(
         field_id=83,
@@ -1115,6 +1368,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware=None,
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'TpmsLastSeenPressureTimeRr': SignalMeta(
         field_id=84,
@@ -1128,6 +1384,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware=None,
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'InsideTemp': SignalMeta(
         field_id=85,
@@ -1141,6 +1400,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware=None,
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=True,
     ),
     'OutsideTemp': SignalMeta(
         field_id=86,
@@ -1154,6 +1416,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware=None,
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'SeatHeaterLeft': SignalMeta(
         field_id=87,
@@ -1167,6 +1432,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware=None,
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'SeatHeaterRight': SignalMeta(
         field_id=88,
@@ -1180,6 +1448,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware=None,
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'SeatHeaterRearLeft': SignalMeta(
         field_id=89,
@@ -1193,6 +1464,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware=None,
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'SeatHeaterRearRight': SignalMeta(
         field_id=90,
@@ -1206,6 +1480,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware=None,
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'SeatHeaterRearCenter': SignalMeta(
         field_id=91,
@@ -1219,6 +1496,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware=None,
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'AutoSeatClimateLeft': SignalMeta(
         field_id=92,
@@ -1232,6 +1512,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware=None,
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'AutoSeatClimateRight': SignalMeta(
         field_id=93,
@@ -1245,6 +1528,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware=None,
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'DriverSeatBelt': SignalMeta(
         field_id=94,
@@ -1258,6 +1544,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware=None,
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'PassengerSeatBelt': SignalMeta(
         field_id=95,
@@ -1271,6 +1560,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware=None,
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'DriverSeatOccupied': SignalMeta(
         field_id=96,
@@ -1284,6 +1576,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware=None,
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'SemitruckPassengerSeatFoldPosition': SignalMeta(
         field_id=97,
@@ -1297,6 +1592,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware=None,
         semi_only=True,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'LateralAcceleration': SignalMeta(
         field_id=98,
@@ -1310,6 +1608,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware=None,
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'LongitudinalAcceleration': SignalMeta(
         field_id=99,
@@ -1323,6 +1624,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware=None,
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'CruiseSetSpeed': SignalMeta(
         field_id=101,
@@ -1336,6 +1640,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware=None,
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'LifetimeEnergyUsed': SignalMeta(
         field_id=102,
@@ -1349,6 +1656,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware=None,
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'LifetimeEnergyUsedDrive': SignalMeta(
         field_id=103,
@@ -1362,6 +1672,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware=None,
         semi_only=True,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'SemitruckTractorParkBrakeStatus': SignalMeta(
         field_id=104,
@@ -1375,6 +1688,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware=None,
         semi_only=True,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'SemitruckTrailerParkBrakeStatus': SignalMeta(
         field_id=105,
@@ -1388,6 +1704,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware=None,
         semi_only=True,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'BrakePedalPos': SignalMeta(
         field_id=106,
@@ -1401,6 +1720,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware=None,
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'RouteLastUpdated': SignalMeta(
         field_id=107,
@@ -1414,6 +1736,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware='2024.26',
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'RouteLine': SignalMeta(
         field_id=108,
@@ -1427,6 +1752,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware='2024.26',
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'MilesToArrival': SignalMeta(
         field_id=109,
@@ -1440,6 +1768,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware='2024.26',
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'MinutesToArrival': SignalMeta(
         field_id=110,
@@ -1453,6 +1784,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware='2024.26',
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'OriginLocation': SignalMeta(
         field_id=111,
@@ -1466,6 +1800,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware='2024.26',
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'DestinationLocation': SignalMeta(
         field_id=112,
@@ -1479,6 +1816,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware='2024.26',
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'CarType': SignalMeta(
         field_id=113,
@@ -1492,6 +1832,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware=None,
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'Trim': SignalMeta(
         field_id=114,
@@ -1505,6 +1848,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware=None,
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'ExteriorColor': SignalMeta(
         field_id=115,
@@ -1518,6 +1864,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware=None,
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'RoofColor': SignalMeta(
         field_id=116,
@@ -1531,6 +1880,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware=None,
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'ChargePort': SignalMeta(
         field_id=117,
@@ -1544,6 +1896,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware=None,
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'ChargePortLatch': SignalMeta(
         field_id=118,
@@ -1557,6 +1912,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware=None,
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'GuestModeEnabled': SignalMeta(
         field_id=123,
@@ -1570,6 +1928,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware=None,
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'PinToDriveEnabled': SignalMeta(
         field_id=124,
@@ -1583,6 +1944,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware=None,
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'PairedPhoneKeyAndKeyFobQty': SignalMeta(
         field_id=125,
@@ -1596,6 +1960,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware=None,
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'CruiseFollowDistance': SignalMeta(
         field_id=126,
@@ -1609,6 +1976,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware=None,
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'AutomaticBlindSpotCamera': SignalMeta(
         field_id=127,
@@ -1622,6 +1992,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware=None,
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'BlindSpotCollisionWarningChime': SignalMeta(
         field_id=128,
@@ -1635,6 +2008,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware=None,
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'SpeedLimitWarning': SignalMeta(
         field_id=129,
@@ -1648,6 +2024,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware=None,
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'ForwardCollisionWarning': SignalMeta(
         field_id=130,
@@ -1661,6 +2040,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware=None,
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'LaneDepartureAvoidance': SignalMeta(
         field_id=131,
@@ -1674,6 +2056,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware=None,
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'EmergencyLaneDepartureAvoidance': SignalMeta(
         field_id=132,
@@ -1687,6 +2072,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware=None,
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'AutomaticEmergencyBrakingOff': SignalMeta(
         field_id=133,
@@ -1700,6 +2088,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware=None,
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'LifetimeEnergyGainedRegen': SignalMeta(
         field_id=134,
@@ -1713,6 +2104,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware=None,
         semi_only=False,
         documented=False,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'DiStateF': SignalMeta(
         field_id=135,
@@ -1726,6 +2120,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware=None,
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'DiStateREL': SignalMeta(
         field_id=136,
@@ -1739,6 +2136,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware=None,
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'DiStateRER': SignalMeta(
         field_id=137,
@@ -1752,6 +2152,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware=None,
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'DiHeatsinkTF': SignalMeta(
         field_id=138,
@@ -1765,6 +2168,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware=None,
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'DiHeatsinkTREL': SignalMeta(
         field_id=139,
@@ -1778,6 +2184,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware=None,
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'DiHeatsinkTRER': SignalMeta(
         field_id=140,
@@ -1791,6 +2200,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware=None,
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'DiAxleSpeedF': SignalMeta(
         field_id=141,
@@ -1804,6 +2216,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware=None,
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'DiAxleSpeedREL': SignalMeta(
         field_id=142,
@@ -1817,6 +2232,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware=None,
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'DiAxleSpeedRER': SignalMeta(
         field_id=143,
@@ -1830,6 +2248,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware=None,
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'DiSlaveTorqueCmd': SignalMeta(
         field_id=144,
@@ -1843,6 +2264,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware=None,
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'DiTorqueActualR': SignalMeta(
         field_id=145,
@@ -1856,6 +2280,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware=None,
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'DiTorqueActualF': SignalMeta(
         field_id=146,
@@ -1869,6 +2296,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware=None,
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'DiTorqueActualREL': SignalMeta(
         field_id=147,
@@ -1882,6 +2312,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware=None,
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'DiTorqueActualRER': SignalMeta(
         field_id=148,
@@ -1895,6 +2328,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware=None,
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'DiStatorTempF': SignalMeta(
         field_id=149,
@@ -1908,6 +2344,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware=None,
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'DiStatorTempREL': SignalMeta(
         field_id=150,
@@ -1921,6 +2360,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware=None,
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'DiStatorTempRER': SignalMeta(
         field_id=151,
@@ -1934,6 +2376,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware=None,
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'DiVBatF': SignalMeta(
         field_id=152,
@@ -1947,6 +2392,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware=None,
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'DiVBatREL': SignalMeta(
         field_id=153,
@@ -1960,6 +2408,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware=None,
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'DiVBatRER': SignalMeta(
         field_id=154,
@@ -1973,6 +2424,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware=None,
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'DiMotorCurrentF': SignalMeta(
         field_id=155,
@@ -1986,6 +2440,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware=None,
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'DiMotorCurrentREL': SignalMeta(
         field_id=156,
@@ -1999,6 +2456,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware=None,
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'DiMotorCurrentRER': SignalMeta(
         field_id=157,
@@ -2012,6 +2472,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware=None,
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'EnergyRemaining': SignalMeta(
         field_id=158,
@@ -2025,6 +2488,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware=None,
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'ServiceMode': SignalMeta(
         field_id=159,
@@ -2038,6 +2504,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware=None,
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'BMSState': SignalMeta(
         field_id=160,
@@ -2051,6 +2520,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware=None,
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'GuestModeMobileAccessState': SignalMeta(
         field_id=161,
@@ -2064,6 +2536,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware=None,
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'DestinationName': SignalMeta(
         field_id=163,
@@ -2077,6 +2552,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware='2024.26',
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'DiInverterTR': SignalMeta(
         field_id=164,
@@ -2090,6 +2568,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware=None,
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'DiInverterTF': SignalMeta(
         field_id=165,
@@ -2103,6 +2584,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware=None,
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'DiInverterTREL': SignalMeta(
         field_id=166,
@@ -2116,6 +2600,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware=None,
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'DiInverterTRER': SignalMeta(
         field_id=167,
@@ -2129,6 +2616,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware=None,
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'DetailedChargeState': SignalMeta(
         field_id=179,
@@ -2142,6 +2632,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware='2024.38',
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'CabinOverheatProtectionMode': SignalMeta(
         field_id=180,
@@ -2155,6 +2648,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware='2024.44.25',
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'CabinOverheatProtectionTemperatureLimit': SignalMeta(
         field_id=181,
@@ -2168,6 +2664,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware='2024.44.25',
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'CenterDisplay': SignalMeta(
         field_id=182,
@@ -2181,6 +2680,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware='2024.44.25',
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'ChargePortDoorOpen': SignalMeta(
         field_id=183,
@@ -2194,6 +2696,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware='2024.44.25',
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'ChargerVoltage': SignalMeta(
         field_id=184,
@@ -2207,6 +2712,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware='2024.44.32',
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=0.3,
+        minimum_delta_recommended=True,
     ),
     'ChargingCableType': SignalMeta(
         field_id=185,
@@ -2220,6 +2728,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware='2024.44.25',
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'ClimateKeeperMode': SignalMeta(
         field_id=186,
@@ -2233,6 +2744,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware='2024.44.25',
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'DefrostForPreconditioning': SignalMeta(
         field_id=187,
@@ -2246,6 +2760,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware='2024.44.25',
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'DefrostMode': SignalMeta(
         field_id=188,
@@ -2259,6 +2776,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware='2024.44.25',
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'EfficiencyPackage': SignalMeta(
         field_id=189,
@@ -2272,6 +2792,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware='2024.44.25',
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'EstimatedHoursToChargeTermination': SignalMeta(
         field_id=190,
@@ -2285,6 +2808,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware='2024.44.25',
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'EuropeVehicle': SignalMeta(
         field_id=191,
@@ -2298,6 +2824,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware='2024.44.25',
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'ExpectedEnergyPercentAtTripArrival': SignalMeta(
         field_id=192,
@@ -2311,6 +2840,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware='2024.44.25',
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'FastChargerType': SignalMeta(
         field_id=193,
@@ -2324,6 +2856,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware='2024.44.25',
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'HomelinkDeviceCount': SignalMeta(
         field_id=194,
@@ -2337,6 +2872,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware='2024.44.25',
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'HomelinkNearby': SignalMeta(
         field_id=195,
@@ -2350,6 +2888,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware='2024.44.25',
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'HvacACEnabled': SignalMeta(
         field_id=196,
@@ -2363,6 +2904,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware='2024.44.25',
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'HvacAutoMode': SignalMeta(
         field_id=197,
@@ -2376,6 +2920,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware='2024.44.25',
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'HvacFanSpeed': SignalMeta(
         field_id=198,
@@ -2389,6 +2936,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware='2024.44.25',
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'HvacFanStatus': SignalMeta(
         field_id=199,
@@ -2402,6 +2952,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware='2024.44.25',
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'HvacLeftTemperatureRequest': SignalMeta(
         field_id=200,
@@ -2415,6 +2968,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware='2024.44.25',
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'HvacPower': SignalMeta(
         field_id=201,
@@ -2428,6 +2984,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware='2024.44.25',
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'HvacRightTemperatureRequest': SignalMeta(
         field_id=202,
@@ -2441,6 +3000,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware='2024.44.25',
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'HvacSteeringWheelHeatAuto': SignalMeta(
         field_id=203,
@@ -2454,6 +3016,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware='2024.44.25',
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'HvacSteeringWheelHeatLevel': SignalMeta(
         field_id=204,
@@ -2467,6 +3032,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware='2024.44.25',
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'OffroadLightbarPresent': SignalMeta(
         field_id=205,
@@ -2480,6 +3048,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware='2024.44.25',
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'PowershareHoursLeft': SignalMeta(
         field_id=206,
@@ -2493,6 +3064,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware='2024.44.25',
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'PowershareInstantaneousPowerKW': SignalMeta(
         field_id=207,
@@ -2506,6 +3080,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware='2024.44.25',
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'PowershareStatus': SignalMeta(
         field_id=208,
@@ -2519,6 +3096,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware='2024.44.25',
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'PowershareStopReason': SignalMeta(
         field_id=209,
@@ -2532,6 +3112,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware='2024.44.25',
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'PowershareType': SignalMeta(
         field_id=210,
@@ -2545,6 +3128,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware='2024.44.25',
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'RearDisplayHvacEnabled': SignalMeta(
         field_id=211,
@@ -2558,6 +3144,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware='2024.44.25',
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'RearSeatHeaters': SignalMeta(
         field_id=212,
@@ -2571,6 +3160,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware='2024.44.25',
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'RemoteStartEnabled': SignalMeta(
         field_id=213,
@@ -2584,6 +3176,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware='2024.44.25',
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'RightHandDrive': SignalMeta(
         field_id=214,
@@ -2597,6 +3192,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware='2024.44.25',
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'RouteTrafficMinutesDelay': SignalMeta(
         field_id=215,
@@ -2610,6 +3208,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware='2024.44.25',
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'SoftwareUpdateDownloadPercentComplete': SignalMeta(
         field_id=216,
@@ -2623,6 +3224,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware='2024.44.25',
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'SoftwareUpdateExpectedDurationMinutes': SignalMeta(
         field_id=217,
@@ -2636,6 +3240,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware='2024.44.25',
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'SoftwareUpdateInstallationPercentComplete': SignalMeta(
         field_id=218,
@@ -2649,6 +3256,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware='2024.44.25',
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'SoftwareUpdateScheduledStartTime': SignalMeta(
         field_id=219,
@@ -2662,6 +3272,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware='2024.44.25',
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'SoftwareUpdateVersion': SignalMeta(
         field_id=220,
@@ -2675,6 +3288,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware='2024.44.25',
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'TonneauOpenPercent': SignalMeta(
         field_id=221,
@@ -2688,6 +3304,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware='2024.44.25',
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'TonneauPosition': SignalMeta(
         field_id=222,
@@ -2701,6 +3320,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware='2024.44.25',
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'TonneauTentMode': SignalMeta(
         field_id=223,
@@ -2714,6 +3336,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware='2024.44.25',
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'TpmsHardWarnings': SignalMeta(
         field_id=224,
@@ -2727,6 +3352,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware='2024.44.25',
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'TpmsSoftWarnings': SignalMeta(
         field_id=225,
@@ -2740,6 +3368,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware='2024.44.25',
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'ValetModeEnabled': SignalMeta(
         field_id=226,
@@ -2753,6 +3384,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware='2024.44.25',
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'WheelType': SignalMeta(
         field_id=227,
@@ -2766,6 +3400,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware='2024.44.25',
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'WiperHeatEnabled': SignalMeta(
         field_id=228,
@@ -2779,6 +3416,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware='2024.44.25',
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'LocatedAtHome': SignalMeta(
         field_id=229,
@@ -2792,6 +3432,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware='2024.44.32',
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'LocatedAtWork': SignalMeta(
         field_id=230,
@@ -2805,6 +3448,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware='2024.44.32',
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'LocatedAtFavorite': SignalMeta(
         field_id=231,
@@ -2818,6 +3464,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware='2024.44.32',
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'SettingDistanceUnit': SignalMeta(
         field_id=232,
@@ -2831,6 +3480,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware='2024.44.32',
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'SettingTemperatureUnit': SignalMeta(
         field_id=233,
@@ -2844,6 +3496,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware='2024.44.32',
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'Setting24HourTime': SignalMeta(
         field_id=234,
@@ -2857,6 +3512,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware='2024.44.32',
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'SettingTirePressureUnit': SignalMeta(
         field_id=235,
@@ -2870,6 +3528,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware='2024.44.32',
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'SettingChargeUnit': SignalMeta(
         field_id=236,
@@ -2883,6 +3544,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware='2024.44.32',
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'ClimateSeatCoolingFrontLeft': SignalMeta(
         field_id=237,
@@ -2896,6 +3560,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware='2024.44.32',
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'ClimateSeatCoolingFrontRight': SignalMeta(
         field_id=238,
@@ -2909,6 +3576,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware='2024.44.32',
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'LightsHazardsActive': SignalMeta(
         field_id=239,
@@ -2922,6 +3592,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware='2025.2.6',
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'LightsTurnSignal': SignalMeta(
         field_id=240,
@@ -2935,6 +3608,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware='2025.2.6',
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'LightsHighBeams': SignalMeta(
         field_id=241,
@@ -2948,6 +3624,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware='2025.2.6',
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'MediaPlaybackStatus': SignalMeta(
         field_id=242,
@@ -2961,6 +3640,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware='2025.2.6',
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'MediaPlaybackSource': SignalMeta(
         field_id=243,
@@ -2974,6 +3656,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware='2025.2.6',
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'MediaAudioVolume': SignalMeta(
         field_id=244,
@@ -2987,6 +3672,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware='2025.2.6',
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'MediaNowPlayingDuration': SignalMeta(
         field_id=245,
@@ -3000,6 +3688,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware='2025.2.6',
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'MediaNowPlayingElapsed': SignalMeta(
         field_id=246,
@@ -3013,6 +3704,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware='2025.2.6',
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'MediaNowPlayingArtist': SignalMeta(
         field_id=247,
@@ -3026,6 +3720,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware='2025.2.6',
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'MediaNowPlayingTitle': SignalMeta(
         field_id=248,
@@ -3039,6 +3736,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware='2025.2.6',
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'MediaNowPlayingAlbum': SignalMeta(
         field_id=249,
@@ -3052,6 +3752,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware='2025.2.6',
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'MediaNowPlayingStation': SignalMeta(
         field_id=250,
@@ -3065,6 +3768,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware='2025.2.6',
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'MediaAudioVolumeIncrement': SignalMeta(
         field_id=251,
@@ -3078,6 +3784,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware='2025.2.6',
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'MediaAudioVolumeMax': SignalMeta(
         field_id=252,
@@ -3091,6 +3800,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware='2025.2.6',
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'SunroofInstalled': SignalMeta(
         field_id=253,
@@ -3104,6 +3816,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware='2025.2.6',
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'SeatVentEnabled': SignalMeta(
         field_id=254,
@@ -3117,6 +3832,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware='2025.2.6',
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'RearDefrostEnabled': SignalMeta(
         field_id=255,
@@ -3130,6 +3848,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware='2025.2.6',
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'ChargeRateMilePerHour': SignalMeta(
         field_id=256,
@@ -3143,6 +3864,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware='2025.2.6',
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'MilesSinceReset': SignalMeta(
         field_id=258,
@@ -3156,6 +3880,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware='2025.44.25.5',
         semi_only=False,
         documented=True,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'SelfDrivingMilesSinceReset': SignalMeta(
         field_id=259,
@@ -3169,6 +3896,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware='2025.44.25.5',
         semi_only=False,
         documented=True,
+        minimum_delta_required=1.0,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'GpsAccuracyMeters': SignalMeta(
         field_id=260,
@@ -3182,6 +3912,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware='2026.32',
         semi_only=False,
         documented=False,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'LifetimeEnergyChargedKwh': SignalMeta(
         field_id=261,
@@ -3195,6 +3928,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware='2026.32',
         semi_only=False,
         documented=False,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'BrickSocMinPercent': SignalMeta(
         field_id=262,
@@ -3208,6 +3944,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware='2026.32',
         semi_only=False,
         documented=False,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'NominalFullPackEnergyKwh': SignalMeta(
         field_id=263,
@@ -3221,6 +3960,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware='2026.32',
         semi_only=False,
         documented=False,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'GradeEstimatePercent': SignalMeta(
         field_id=264,
@@ -3234,6 +3976,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware='2026.32',
         semi_only=False,
         documented=False,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'MaxSpeedToReachDestinationMph': SignalMeta(
         field_id=265,
@@ -3247,6 +3992,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware='2026.32',
         semi_only=False,
         documented=False,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'SoftwareUpdateAvailable': SignalMeta(
         field_id=266,
@@ -3260,6 +4008,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware='2026.32',
         semi_only=False,
         documented=False,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'SoftwareUpdateInProgress': SignalMeta(
         field_id=267,
@@ -3273,6 +4024,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware='2026.32',
         semi_only=False,
         documented=False,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'RemoteStartActive': SignalMeta(
         field_id=268,
@@ -3286,6 +4040,9 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware='2026.32',
         semi_only=False,
         documented=False,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
     'SemiCruiseSpeedLimitMph': SignalMeta(
         field_id=269,
@@ -3299,5 +4056,8 @@ SIGNALS: dict[str, SignalMeta] = {
         min_firmware='2026.32',
         semi_only=True,
         documented=False,
+        minimum_delta_required=None,
+        minimum_delta_default=None,
+        minimum_delta_recommended=False,
     ),
 }
