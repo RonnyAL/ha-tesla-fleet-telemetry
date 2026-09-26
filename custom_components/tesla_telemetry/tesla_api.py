@@ -54,13 +54,36 @@ class TeslaAuthError(TeslaApiError):
 
 @dataclass(slots=True)
 class TelemetryFieldConfig:
-    """One field's streaming policy. `interval_seconds` is the floor —
-    Tesla pushes on change but never faster than this."""
+    """One field's streaming policy.
+
+    `interval_seconds` is a rate ceiling: Tesla pushes on change, never faster
+    than this. The other three arrived later and each has a firmware floor —
+    `minimum_delta` and `resend_interval_seconds` from 2024.44.32,
+    `include_fields` from 2026.26.6 — so they are omitted unless set, and the
+    firmware gate in `signals.resolve_field_policies` decides whether they are
+    ever set at all.
+    """
 
     interval_seconds: int
+    minimum_delta: float | None = None
+    resend_interval_seconds: int | None = None
+    include_fields: list[str] = field(default_factory=list)
 
-    def to_dict(self) -> dict[str, int]:
-        return {"interval_seconds": self.interval_seconds}
+    def to_dict(self) -> dict[str, Any]:
+        """Only the keys that are actually configured.
+
+        Omitting unset keys is what keeps a default configuration byte-
+        identical to the pre-Phase-4 body, so an untouched entry on old
+        firmware is never exposed to a key Tesla documents no behaviour for.
+        """
+        body: dict[str, Any] = {"interval_seconds": self.interval_seconds}
+        if self.minimum_delta is not None:
+            body["minimum_delta"] = self.minimum_delta
+        if self.resend_interval_seconds is not None:
+            body["resend_interval_seconds"] = self.resend_interval_seconds
+        if self.include_fields:
+            body["include_fields"] = list(self.include_fields)
+        return body
 
 
 @dataclass(slots=True)

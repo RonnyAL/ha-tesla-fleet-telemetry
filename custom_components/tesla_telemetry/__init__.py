@@ -185,8 +185,13 @@ async def _async_options_updated(
     if not record:
         return
     coordinator: TeslaTelemetryCoordinator = record["coordinator"]
-    new_intervals = resolve_effective_intervals(entry)
-    coordinator.effective_intervals = new_intervals
+
+    from .services import _config_fields
+
+    new_fields = _config_fields(entry)
+    coordinator.effective_intervals = {
+        name: body["interval_seconds"] for name, body in new_fields.items()
+    }
 
     # Skip a redundant push when the effective config is unchanged — e.g. only
     # the cost rate was edited, or this fired from our own last_sync stamp
@@ -198,7 +203,7 @@ async def _async_options_updated(
     # already held it — so after an update that changed the default signal set
     # the two always matched and the new signals were never pushed.
     if entry.data.get(CONF_LAST_SYNC_FIELDS_HASH) == _fields_fingerprint(
-        new_intervals
+        new_fields
     ):
         return
 
@@ -226,7 +231,7 @@ async def _async_options_updated(
             err,
         )
         return
-    _stamp_last_sync(hass, entry, new_intervals)
+    _stamp_last_sync(hass, entry, new_fields)
     _LOGGER.info(
         "tesla_telemetry: options change re-pushed telemetry config for "
         "vin=%s — %s",
