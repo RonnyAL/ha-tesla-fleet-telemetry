@@ -65,12 +65,25 @@ def _curated_signals() -> frozenset[str]:
 
 
 def _coerce_interval(value: Any) -> int | None:
-    """Parse a form/stored value into a non-negative int, else ``None``."""
+    """Parse a form/stored value into a non-negative int, else ``None``.
+
+    Rounds rather than truncates, so a fractional value is never mistaken for
+    the interval-0 disable sentinel (see below).
+    """
     try:
-        interval = int(value)
+        parsed = float(value)
     except (TypeError, ValueError):
         return None
-    return interval if interval >= 0 else None
+    if parsed < 0:
+        return None
+    interval = round(parsed)
+    if interval == 0 and parsed != 0:
+        # A fractional value such as 0.5 rounds down to the interval-0
+        # disable sentinel, which would silently turn the signal off. Only a
+        # genuine, exact zero disables; anything else that rounds to zero
+        # floors to the fastest real interval instead.
+        return 1
+    return interval
 
 
 def _coerce_delta(value: Any) -> float | None:
@@ -126,13 +139,22 @@ def _normalise_override(value: Any) -> dict[str, Any] | None:
             result["minimum_delta"] = delta
         resend = _coerce_interval(value.get("resend_interval_seconds"))
         if resend:
-            result["resend_interval_seconds"] = resend
-        include = tuple(
-            name for name in (value.get("include_fields") or [])
-            if isinstance(name, str)
-        )
-        if include:
-            result["include_fields"] = include
+            result["resend_interval_seconds"] = min(resend, SIGNAL_INTERVAL_MAX)
+        raw_include = value.get("include_fields")
+        if isinstance(raw_include, (list, tuple)):
+            # A bare string is iterable too, and would silently explode into
+            # its individual characters rather than being rejected — accept
+            # only an actual list/tuple. Dedupe while keeping first-seen
+            # order, since a repeated name would otherwise duplicate a key in
+            # the pushed config and needlessly change the fingerprint.
+            seen: set[str] = set()
+            ordered: list[str] = []
+            for name in raw_include:
+                if isinstance(name, str) and name not in seen:
+                    seen.add(name)
+                    ordered.append(name)
+            if ordered:
+                result["include_fields"] = tuple(ordered)
         return result
     # The legacy shape: a bare interval.
     interval = _coerce_interval(value)
@@ -239,10 +261,30 @@ def resolve_field_policies(
             include_fields=tuple(override.get("include_fields", ())),
         )
 
-    enabled = set(policies)
     supports_delta = evidence.supports(FLOOR_MINIMUM_DELTA)
     supports_resend = evidence.supports(FLOOR_RESEND_INTERVAL)
     supports_include = evidence.supports(FLOOR_INCLUDE_FIELDS)
+
+    if not supports_delta:
+        for name in list(policies):
+            meta = SIGNALS.get(name)
+            if meta is not None and meta.minimum_delta_required is not None:
+                # Tesla documents that this field never reports at all
+                # without a minimum_delta of at least this value. Emitting it
+                # anyway would just be a dead entity stuck at "unknown" with
+                # nothing to explain why. Proven evidence gets written to
+                # entry.data, which triggers a re-push, so the signal
+                # reappears on its own once the car demonstrates support —
+                # no action needed from the user.
+                _LOGGER.debug(
+                    "dropping %s: requires minimum_delta but firmware has "
+                    "not proven support for it (floor %s)",
+                    name,
+                    FLOOR_MINIMUM_DELTA,
+                )
+                del policies[name]
+
+    enabled = set(policies)
 
     for name, policy in list(policies.items()):
         # Options can be edited in any order, so an include can name a signal

@@ -8,6 +8,7 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 from custom_components.tesla_telemetry.const import (
+    CONF_ASSUME_FIRMWARE_SUPPORT,
     CONF_INTERVAL_PRESET,
     CONF_SIGNAL_OVERRIDES,
     DEFAULT_INTERVALS_SECONDS,
@@ -203,6 +204,35 @@ def test_an_override_for_a_signal_no_longer_in_the_catalog_is_skipped() -> None:
     assert "NotASignal" not in policies
 
 
+# --- normalisation hygiene --------------------------------------------------
+
+def test_a_fractional_interval_never_lands_on_the_disable_sentinel() -> None:
+    """0.5 must not truncate to 0, the interval-0 disable sentinel."""
+    policies = resolve_field_policies(
+        entry(options={CONF_SIGNAL_OVERRIDES: {"VehicleSpeed": {"interval_seconds": 0.5}}}),
+        MODERN,
+    )
+    assert "VehicleSpeed" in policies
+    assert policies["VehicleSpeed"].interval_seconds == 1
+
+
+def test_a_bare_string_include_fields_is_rejected_not_exploded() -> None:
+    """A string is iterable; naively iterating it yields single characters."""
+    options = {CONF_SIGNAL_OVERRIDES: {"Odometer": {"include_fields": "VehicleSpeed"}}}
+    policies = resolve_field_policies(entry(options=options), MODERN)
+    assert policies["Odometer"].include_fields == ()
+
+
+def test_include_fields_deduplicates_preserving_first_seen_order() -> None:
+    options = {
+        CONF_SIGNAL_OVERRIDES: {
+            "Odometer": {"include_fields": ["VehicleSpeed", "Soc", "VehicleSpeed"]}
+        }
+    }
+    policies = resolve_field_policies(entry(options=options), MODERN)
+    assert policies["Odometer"].include_fields == ("VehicleSpeed", "Soc")
+
+
 # --- layer 4: required deltas ----------------------------------------------
 
 def test_a_required_delta_is_applied_when_the_user_sets_none() -> None:
@@ -305,8 +335,8 @@ def test_old_firmware_loses_every_new_key() -> None:
     assert policy.minimum_delta is None
     assert policy.resend_interval_seconds is None
     assert policy.include_fields == ()
-    # The interval is never gated.
-    assert policy.interval_seconds > 0
+    # The interval is never gated: InsideTemp keeps its default, 30s.
+    assert policy.interval_seconds == 30
 
 
 def test_the_delta_floor_unlocks_delta_and_resend_but_not_include() -> None:
@@ -326,23 +356,24 @@ def test_the_delta_floor_unlocks_delta_and_resend_but_not_include() -> None:
     assert policy.include_fields == ()
 
 
-def test_a_required_delta_survives_the_gate_on_any_car_that_can_send_it() -> None:
-    """SelfDrivingMilesSinceReset needs 2025.44.25.5, far above the delta floor.
+def test_a_required_delta_is_dropped_without_evidence() -> None:
+    """SelfDrivingMilesSinceReset never reports without minimum_delta >= 1.
 
-    Layer 5 can in principle strip what layer 4 required; it cannot happen for
-    this field, and the implication is pinned rather than trusted.
+    A fresh entry has proven nothing, so the resolver never gets to apply the
+    required delta — the gate keys on proven evidence, not on the field's own
+    ``min_firmware``. Pushing the field anyway would be a dead entity the
+    vehicle silently never populates. Dropping it is self-healing: proven
+    evidence is written to ``entry.data``, which triggers a re-push, so the
+    signal reappears on its own once the car demonstrates support.
     """
-    from custom_components.tesla_telemetry.firmware import (
-        FLOOR_MINIMUM_DELTA,
-        at_least,
+    policies = resolve_field_policies(
+        entry(options={CONF_SIGNAL_OVERRIDES: {"SelfDrivingMilesSinceReset": {}}})
     )
-    from custom_components.tesla_telemetry.signal_metadata import SIGNALS
+    assert "SelfDrivingMilesSinceReset" not in policies
 
-    floor = SIGNALS["SelfDrivingMilesSinceReset"].min_firmware
-    assert at_least(floor, FLOOR_MINIMUM_DELTA), (
-        "a car able to send this field must also support minimum_delta"
-    )
-    evidence = FirmwareEvidence(proven_version=floor)
+
+def test_a_required_delta_appears_once_firmware_proves_support() -> None:
+    evidence = FirmwareEvidence(proven_version="2025.44.25.5")
     policies = resolve_field_policies(
         entry(options={CONF_SIGNAL_OVERRIDES: {"SelfDrivingMilesSinceReset": {}}}),
         evidence,
@@ -352,7 +383,7 @@ def test_a_required_delta_survives_the_gate_on_any_car_that_can_send_it() -> Non
 
 def test_assume_support_defeats_the_gate() -> None:
     options = {
-        "assume_firmware_support": True,
+        CONF_ASSUME_FIRMWARE_SUPPORT: True,
         CONF_SIGNAL_OVERRIDES: {"InsideTemp": {"minimum_delta": 0.5}},
     }
     from custom_components.tesla_telemetry.firmware import evidence_from_entry
