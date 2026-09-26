@@ -84,6 +84,11 @@ class TeslaTelemetryCoordinator:
         # staleness tracks whatever interval the signal is actually configured
         # at rather than the hardcoded default.
         self.effective_intervals: dict[str, int] = dict(DEFAULT_INTERVALS_SECONDS)
+        # Resend intervals, where configured. A resend is a commitment to send
+        # even when nothing changed, which is the only thing that makes
+        # staleness a sound question: without one, an unchanged signal is
+        # never resent and a perfectly healthy entity looks stale.
+        self.resend_intervals: dict[str, int] = {}
         # Every entity for this vehicle attaches to one HA device, named
         # after the vehicle so multiple Teslas stay cleanly separated.
         self.device_info = DeviceInfo(
@@ -139,6 +144,14 @@ class TeslaTelemetryCoordinator:
         sample = self._samples.get(name)
         if sample is None:
             return True
-        interval = self.effective_intervals.get(name, 60)
+        # A resend interval is a real commitment to send, so it's the sound
+        # basis for staleness where one exists. Without one, the interval
+        # ceiling is used instead — not sound (push-on-change means an
+        # unchanged signal is never resent), but it is also the only signal
+        # today's users have that a car has gone offline, so that fallback
+        # behaviour is kept.
+        interval = self.resend_intervals.get(name) or self.effective_intervals.get(
+            name, 60
+        )
         cutoff = (now or time.time()) - interval * STALE_INTERVAL_MULTIPLIER
         return sample.received_at < cutoff

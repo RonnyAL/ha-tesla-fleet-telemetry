@@ -31,11 +31,12 @@ from .generic.factory import GenericEntityFactory
 from .migration import async_migrate_unique_ids
 from .receiver import TeslaTelemetryView
 from .services import (
+    _config_fields,
+    _effective_and_resend_intervals,
     _fields_fingerprint,
     async_register_services,
     async_schedule_auto_resync,
 )
-from .signals import resolve_effective_intervals
 from .tesla_api import TeslaApi
 from .values import value_as_string
 
@@ -99,10 +100,16 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     client_secret = getattr(implementation, "client_secret", "")
 
     coordinator = TeslaTelemetryCoordinator(hass, vin, vehicle_name)
-    # Seed the staleness map from the entry's resolved config (defaults +
-    # options overrides + preset) so disabled/retuned signals are judged
-    # against their configured interval, not the hardcoded default.
-    coordinator.effective_intervals = resolve_effective_intervals(entry)
+    # Seed the staleness map from the entry's fully resolved, firmware-gated
+    # config (defaults + options overrides + preset + the firmware gate) —
+    # the same helper `_async_options_updated` below uses — so disabled or
+    # retuned signals are judged against their actually-configured interval,
+    # and a signal whose required minimum_delta was gated away (and is
+    # therefore not in what's actually pushed) is absent here too rather than
+    # only after the first options save.
+    coordinator.effective_intervals, coordinator.resend_intervals = (
+        _effective_and_resend_intervals(_config_fields(entry))
+    )
 
     api = TeslaApi(
         aiohttp_client.async_get_clientsession(hass),
@@ -263,15 +270,14 @@ async def _async_options_updated(
 
     from .services import (
         _build_telemetry_config,
-        _config_fields,
         _stamp_last_sync,
         entry_ca_pem,
     )
 
     new_fields = _config_fields(entry)
-    coordinator.effective_intervals = {
-        name: body["interval_seconds"] for name, body in new_fields.items()
-    }
+    coordinator.effective_intervals, coordinator.resend_intervals = (
+        _effective_and_resend_intervals(new_fields)
+    )
 
     # Skip a redundant push when the effective config is unchanged — e.g. only
     # the cost rate was edited, or this fired from our own last_sync stamp

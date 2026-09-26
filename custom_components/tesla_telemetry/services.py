@@ -50,10 +50,10 @@ from .const import (
     CONF_PRIVATE_KEY_PEM,
     CONF_VIN,
     DOMAIN,
-    INTERVAL_PRESET_OVERRIDES,
 )
 from .firmware import evidence_from_entry
-from .signals import FieldPolicy, resolve_effective_intervals, resolve_field_policies
+from .presets import PRESETS
+from .signals import FieldPolicy, resolve_field_policies
 from .tesla_api import (
     TelemetryConfig,
     TelemetryFieldConfig,
@@ -108,7 +108,13 @@ _GET_ERRORS_SCHEMA = vol.Schema(
 _SET_PRESET_SCHEMA = vol.Schema(
     {
         vol.Optional(ATTR_ENTRY_ID): str,
-        vol.Required(ATTR_PRESET): vol.In(list(INTERVAL_PRESET_OVERRIDES)),
+        # Validated against the full preset catalog (`presets.PRESETS`), not
+        # the legacy `INTERVAL_PRESET_OVERRIDES` table, which only ever held
+        # `default` and `high_rate`. Validating against that narrower table
+        # let the options UI offer `eco`/`balanced`/`live` while the service
+        # rejected them — two stores disagreeing about one setting, which is
+        # exactly the bug this phase's preset work exists to remove.
+        vol.Required(ATTR_PRESET): vol.In(list(PRESETS)),
         vol.Optional(ATTR_CA_PEM): str,
     }
 )
@@ -179,6 +185,31 @@ def _config_fields(entry: ConfigEntry) -> dict[str, dict[str, Any]]:
         name: config.to_dict()
         for name, config in _policy_field_configs(entry).items()
     }
+
+
+def _effective_and_resend_intervals(
+    fields: Mapping[str, dict[str, Any]],
+) -> tuple[dict[str, int], dict[str, int]]:
+    """The coordinator's staleness inputs, from the same gated fields the
+    vehicle is actually configured with (a `_config_fields(entry)` result).
+
+    Both `__init__.async_setup_entry` and `_async_options_updated` call this
+    on their own `_config_fields(entry)` rather than each deriving the two
+    maps themselves, so a signal whose required `minimum_delta` was gated
+    away by the firmware check — and is therefore absent from what is
+    actually pushed — is judged the same way at startup as it is after the
+    next options save. Two copies of this derivation could drift; one shared
+    one cannot.
+    """
+    effective_intervals = {
+        name: body["interval_seconds"] for name, body in fields.items()
+    }
+    resend_intervals = {
+        name: body["resend_interval_seconds"]
+        for name, body in fields.items()
+        if "resend_interval_seconds" in body
+    }
+    return effective_intervals, resend_intervals
 
 
 def _resolve_ca_pem(
@@ -406,16 +437,24 @@ async def _get_telemetry_errors_handler(call: ServiceCall) -> ServiceResponse:
 async def _set_interval_preset_handler(call: ServiceCall) -> ServiceResponse:
     """Switch the telemetry interval preset and re-push the config.
 
-    The preset name is persisted in entry.data so a HA restart preserves the
-    user's choice. Auto-resync also honours it.
+    The preset name is persisted in entry.options (see `signals.active_preset`)
+    so a HA restart preserves the user's choice, and so it lives in the same
+    place the options-flow preset step writes it. Auto-resync also honours it.
     """
     hass = call.hass
     entry = _resolve_entry(hass, call.data.get(ATTR_ENTRY_ID))
     api = _entry_api(hass, entry)
     preset: str = call.data[ATTR_PRESET]
 
-    new_data = {**entry.data, CONF_INTERVAL_PRESET: preset}
-    hass.config_entries.async_update_entry(entry, data=new_data)
+    # Written to options, not data. Two stores for one setting is the bug
+    # where the service appears to do nothing because `signals.active_preset`
+    # reads options first — `active_preset` still falls back to `entry.data`
+    # so an entry last written by the pre-Phase-4 service keeps its preset
+    # until something saves.
+    hass.config_entries.async_update_entry(
+        entry,
+        options={**entry.options, CONF_INTERVAL_PRESET: preset},
+    )
     # _build_telemetry_config now reads the just-saved preset.
     entry = hass.config_entries.async_get_entry(entry.entry_id)  # type: ignore[assignment]
     assert entry is not None
@@ -423,8 +462,12 @@ async def _set_interval_preset_handler(call: ServiceCall) -> ServiceResponse:
     ca_pem = _resolve_ca_pem(hass, entry, call.data)
     cfg = _build_telemetry_config(entry, ca_pem)
     response = await api.set_fleet_telemetry_config(entry.data[CONF_VIN], cfg)
-    _stamp_last_sync(hass, entry, _config_fields(entry))
-    intervals = resolve_effective_intervals(entry)
+    fields = _config_fields(entry)
+    _stamp_last_sync(hass, entry, fields)
+    # Reported from the same gated source as everything else, not the
+    # ungated `resolve_effective_intervals` — otherwise this could
+    # under-report versus what was actually just pushed above.
+    intervals, _resend_intervals = _effective_and_resend_intervals(fields)
     _LOGGER.info(
         "tesla_telemetry: interval preset=%s applied for vin=%s — %s",
         preset,
