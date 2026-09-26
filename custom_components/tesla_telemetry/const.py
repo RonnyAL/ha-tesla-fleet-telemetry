@@ -198,13 +198,24 @@ DEFAULT_INTERVALS_SECONDS: dict[str, int] = {
     "LocatedAtFavorite": 5,
     "ServiceMode": 60,
     "LightsHazardsActive": 5,
+    # The installed firmware version. Push-on-change, and firmware moves
+    # monthly, so a 6-hour ceiling costs roughly one signal a month. It earns
+    # its place by telling the firmware gate which per-field keys this car can
+    # honour — and it gets a sensor of its own through the generic path.
+    #
+    # Its category is Vehicle Configuration, so any preset retunes it to 3600.
+    # That is not a regression: at roughly one change a month the ceiling never
+    # binds, so both values cost the same nothing.
+    "Version": 21600,
 }
 
-# Curated grouping of the default signals into collapsible sections for the
-# options flow. Every key of DEFAULT_INTERVALS_SECONDS must appear in exactly
-# one category (guarded by tests/test_signals.py). Signals the user adds from
-# the full Tesla catalog that aren't listed here surface under a synthetic
-# "Additional signals" section instead.
+# A curation aid, not data the UI reads: this only backs
+# tests/test_signals.py::test_every_default_signal_is_in_exactly_one_category,
+# which checks that every key of DEFAULT_INTERVALS_SECONDS is placed in
+# exactly one category here. The options flow gets its category grouping from
+# `signal_metadata.SIGNALS[name].category` instead (see
+# `options_flow._catalog_by_category`), so do not go looking here for the
+# renderer that groups the "Browse a category" step — there isn't one.
 # Each local-addition signal goes into an existing section above (no new
 # translation keys needed) — inlined from the removed stopgap module's
 # category table.
@@ -297,6 +308,7 @@ SIGNAL_CATEGORIES: dict[str, list[str]] = {
         SIGNAL_SOFTWARE_UPDATE_VERSION,
         SIGNAL_SOFTWARE_UPDATE_DOWNLOAD_PCT,
         SIGNAL_SOFTWARE_UPDATE_INSTALL_PCT,
+        "Version",
     ],
     "powertrain": [
         SIGNAL_MOTOR_STATOR_TEMP_FRONT,
@@ -389,6 +401,18 @@ CONF_PRIVATE_KEY_PEM = "private_key_pem"
 # unattended push and then silently reverted, breaking the vehicle's TLS
 # trust anchor days after the change that caused it.
 CONF_CA_PEM = "ca_pem"
+
+# Firmware support evidence, persisted on entry.data as
+# ``{"reported": str | None, "proven": str | None}``. Stored on `data` rather
+# than `options` deliberately: an entry update runs the options-change
+# listener, which re-pushes when the fields fingerprint changed — so the moment
+# proof unlocks a field key, the config carrying it reaches the car on its own.
+CONF_FIRMWARE_EVIDENCE = "firmware_evidence"
+
+# Per-entry escape hatch: send the newer per-field keys without waiting for the
+# vehicle to demonstrate support. Off by default; the only way to bypass
+# evidence.
+CONF_ASSUME_FIRMWARE_SUPPORT = "assume_firmware_support"
 
 # WebSocket endpoint registered on HA's HTTP server. nginx proxies the
 # vehicle's mTLS WSS connection here after validating the client cert.

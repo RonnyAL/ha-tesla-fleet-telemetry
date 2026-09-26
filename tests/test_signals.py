@@ -16,8 +16,6 @@ import sys
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
 
-import pytest
-
 # --- Load const.py + signals.py in isolation under a synthetic package -------
 # signals.py uses ``from .const import ...``, so it needs a package context;
 # we build one whose __path__ points at the integration dir without running its
@@ -100,6 +98,23 @@ def test_bad_override_values_are_ignored() -> None:
 
 
 # ---------------------------------------------------------------------------
+# A bare string is iterable; naively iterating it explodes it into single
+# characters. `resolve_field_policies`'s own include-hygiene layer happens to
+# filter that garbage back out (single characters are never enabled signal
+# names), which is why a mutation of the ``isinstance(raw_include, (list,
+# tuple))`` guard in ``_normalise_override`` can still pass a test written
+# against `resolve_field_policies`. This asserts the guard directly, one
+# layer below hygiene, via `signal_overrides`.
+# ---------------------------------------------------------------------------
+def test_signal_overrides_rejects_a_bare_string_include_fields() -> None:
+    entry = _entry(
+        {const.CONF_SIGNAL_OVERRIDES: {"Odometer": {"include_fields": "VehicleSpeed"}}}
+    )
+    overrides = signals.signal_overrides(entry)
+    assert overrides["Odometer"].get("include_fields", ()) == ()
+
+
+# ---------------------------------------------------------------------------
 # Category catalog invariant
 # ---------------------------------------------------------------------------
 def test_every_default_signal_is_in_exactly_one_category() -> None:
@@ -114,71 +129,6 @@ def test_every_default_signal_is_in_exactly_one_category() -> None:
     # And categories don't list phantom signals absent from the defaults.
     assert set(counts) - set(const.DEFAULT_INTERVALS_SECONDS) == set()
 
-
-# ---------------------------------------------------------------------------
-# parse_options_input — only deviations from the default are stored
-# ---------------------------------------------------------------------------
-def _form_from(effective: dict[str, int]) -> dict:
-    """Build a submitted-form dict (nested sections) from a signal→interval map."""
-    user_input: dict = {}
-    for category, sigs in const.SIGNAL_CATEGORIES.items():
-        user_input[category] = {
-            s: effective.get(s, const.DEFAULT_INTERVALS_SECONDS.get(s, 0))
-            for s in sigs
-        }
-    user_input["add_signals"] = {"signals": []}
-    user_input["cost"] = {}
-    return user_input
-
-
-def test_parse_untouched_form_stores_no_overrides() -> None:
-    entry = _entry()
-    parsed = signals.parse_options_input(entry, _form_from({}))
-    assert parsed[const.CONF_SIGNAL_OVERRIDES] == {}
-
-
-def test_parse_stores_only_changed_signals() -> None:
-    entry = _entry()
-    form = _form_from({})
-    form["driving"]["VehicleSpeed"] = 2  # change one
-    form["driving"]["Location"] = 0  # disable one
-    parsed = signals.parse_options_input(entry, form)
-    assert parsed[const.CONF_SIGNAL_OVERRIDES] == {"VehicleSpeed": 2, "Location": 0}
-
-
-def test_parse_add_signals_adds_at_default_interval() -> None:
-    entry = _entry()
-    form = _form_from({})
-    form["add_signals"] = {"signals": ["Hvil"]}
-    parsed = signals.parse_options_input(entry, form)
-    assert parsed[const.CONF_SIGNAL_OVERRIDES]["Hvil"] == (
-        const.DEFAULT_NEW_SIGNAL_INTERVAL
-    )
-
-
-def test_parse_round_trips_through_resolver() -> None:
-    """Parse a changed form, feed it back as options, confirm the resolver
-    yields the edited config."""
-    entry = _entry()
-    form = _form_from({})
-    form["driving"]["VehicleSpeed"] = 3
-    parsed = signals.parse_options_input(entry, form)
-    result = signals.resolve_effective_intervals(_entry(parsed))
-    assert result["VehicleSpeed"] == 3
-
-
-# ---------------------------------------------------------------------------
-# Full catalog enumeration (needs protobuf)
-# ---------------------------------------------------------------------------
-def test_all_catalog_signals_from_proto() -> None:
-    pytest.importorskip("google.protobuf")
-    catalog = signals.all_catalog_signals()
-    assert "Unknown" not in catalog
-    assert "VehicleSpeed" in catalog
-    assert "Hvil" in catalog
-    # Every curated default is a real catalog signal.
-    assert set(const.DEFAULT_INTERVALS_SECONDS) <= set(catalog)
-    assert len(catalog) > 200  # the full Field enum, not just the curated set
 
 
 # ---------------------------------------------------------------------------

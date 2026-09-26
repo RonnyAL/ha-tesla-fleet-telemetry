@@ -41,7 +41,6 @@ from homeassistant.config_entries import (
     SOURCE_REAUTH,
     ConfigEntry,
     ConfigFlowResult,
-    OptionsFlow,
 )
 from homeassistant.core import callback
 from homeassistant.helpers import aiohttp_client, config_entry_oauth2_flow, selector
@@ -61,7 +60,7 @@ from .const import (
     SELECTABLE_REGIONS,
     region_from_access_token,
 )
-from .signals import build_options_schema, parse_options_input
+from .options_flow import TeslaTelemetryOptionsFlow
 from .tesla_api import TeslaApiError, TeslaAuthError, list_vehicles_with_token
 
 _LOGGER = logging.getLogger(__name__)
@@ -357,34 +356,6 @@ class TeslaTelemetryOAuth2FlowHandler(
             step_id="endpoint",
             data_schema=self.add_suggested_values_to_schema(schema, suggested),
             errors=errors,
-        )
-
-
-class TeslaTelemetryOptionsFlow(OptionsFlow):
-    """Per-signal telemetry configuration + estimated-cost rate.
-
-    A single form, built by :func:`signals.build_options_schema`, with one
-    collapsible section per signal category. Each signal is a minimum-refresh
-    interval in seconds; 0 disables it. Any signal from the full Tesla catalog
-    can be added via the picker. Saving writes ``entry.options`` and the
-    entry's update listener re-pushes the config to the vehicle.
-
-    Also carries the estimated-cost rate (Tesla bills per streaming signal; the
-    default mirrors the published US rate of ~$1 / 150,000 signals), read live
-    by ``EstimatedSignalCostSensor``.
-    """
-
-    async def async_step_init(
-        self, user_input: dict[str, Any] | None = None
-    ) -> ConfigFlowResult:
-        if user_input is not None:
-            return self.async_create_entry(
-                title="",
-                data=parse_options_input(self.config_entry, user_input),
-            )
-        return self.async_show_form(
-            step_id="init",
-            data_schema=build_options_schema(self.config_entry),
         )
 
 

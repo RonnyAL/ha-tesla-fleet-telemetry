@@ -2,17 +2,19 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 
 import aiohttp
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
 from homeassistant.helpers import aiohttp_client, config_entry_oauth2_flow
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 
 from .const import (
+    CONF_FIRMWARE_EVIDENCE,
     CONF_LAST_SYNC_AT,
     CONF_LAST_SYNC_FIELDS_HASH,
     CONF_PRIVATE_KEY_PEM,
@@ -23,17 +25,20 @@ from .const import (
     DEFAULT_REGION,
     DOMAIN,
 )
-from .coordinator import TeslaTelemetryCoordinator, all_signals_topic
+from .coordinator import SignalSample, TeslaTelemetryCoordinator, all_signals_topic
+from .firmware import at_least, proof_from_signals
 from .generic.factory import GenericEntityFactory
 from .migration import async_migrate_unique_ids
 from .receiver import TeslaTelemetryView
 from .services import (
+    _config_fields,
+    _effective_and_resend_intervals,
     _fields_fingerprint,
     async_register_services,
     async_schedule_auto_resync,
 )
-from .signals import resolve_effective_intervals
 from .tesla_api import TeslaApi
+from .values import value_as_string
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -95,10 +100,16 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     client_secret = getattr(implementation, "client_secret", "")
 
     coordinator = TeslaTelemetryCoordinator(hass, vin, vehicle_name)
-    # Seed the staleness map from the entry's resolved config (defaults +
-    # options overrides + preset) so disabled/retuned signals are judged
-    # against their configured interval, not the hardcoded default.
-    coordinator.effective_intervals = resolve_effective_intervals(entry)
+    # Seed the staleness map from the entry's fully resolved, firmware-gated
+    # config (defaults + options overrides + preset + the firmware gate) —
+    # the same helper `_async_options_updated` below uses — so disabled or
+    # retuned signals are judged against their actually-configured interval,
+    # and a signal whose required minimum_delta was gated away (and is
+    # therefore not in what's actually pushed) is absent here too rather than
+    # only after the first options save.
+    coordinator.effective_intervals, coordinator.resend_intervals = (
+        _effective_and_resend_intervals(_config_fields(entry))
+    )
 
     api = TeslaApi(
         aiohttp_client.async_get_clientsession(hass),
@@ -168,7 +179,78 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # is listening; `_created` makes this a no-op for anything already handled.
     factory.replay_cache()
 
+    entry.async_on_unload(
+        _async_record_firmware_evidence(hass, entry, coordinator)
+    )
+
     return True
+
+
+@callback
+def _async_record_firmware_evidence(
+    hass: HomeAssistant,
+    entry: ConfigEntry,
+    coordinator: TeslaTelemetryCoordinator,
+) -> Callable[[], None]:
+    """Accumulate firmware evidence from the live stream.
+
+    Two things are recorded. The `Version` signal is the vehicle's own claim,
+    which is fast but can overstate — before firmware 2024.44 it reported the
+    available update rather than the installed version. Receipt of any signal
+    with a documented firmware floor is proof, which can only understate: a
+    car cannot send a field its firmware does not have.
+
+    Written to `entry.data`, which is deliberate. An entry update runs the
+    options-change listener, and that re-pushes when the fields fingerprint
+    changed — so once proof unlocks a key, a config that actually uses it
+    reaches the car without the user touching anything. Today that arming is
+    conditional: no default signal carries a required `minimum_delta`, and the
+    default options set none of `minimum_delta`/`resend_interval_seconds`/
+    `include_fields`, so the pushed fingerprint is identical across the whole
+    proof ladder until a user opts into one of those per-field keys. Writes
+    are therefore kept rare regardless: nothing happens unless the evidence
+    actually changed.
+    """
+
+    @callback
+    def _handle(name: str, sample: SignalSample) -> None:
+        stored = dict(entry.data.get(CONF_FIRMWARE_EVIDENCE) or {})
+        updated = dict(stored)
+
+        if name == "Version":
+            reported = value_as_string(sample.value)
+            if reported:
+                updated["reported"] = reported
+
+        incoming = proof_from_signals([name])
+        if incoming is not None:
+            current = stored.get("proven")
+            if current is None or at_least(incoming, current):
+                updated["proven"] = incoming
+
+        if updated == stored:
+            return
+        hass.config_entries.async_update_entry(
+            entry, data={**entry.data, CONF_FIRMWARE_EVIDENCE: updated}
+        )
+        _LOGGER.debug(
+            "tesla_telemetry: firmware evidence for vin=%s is now %s",
+            entry.data.get(CONF_VIN),
+            updated,
+        )
+
+    unsub = async_dispatcher_connect(hass, all_signals_topic(coordinator.vin), _handle)
+    # A sample proving firmware support can already be cached on the
+    # coordinator before this subscription exists (the window between
+    # platform setup and this being wired up). Without this replay, a slow
+    # signal's proof would wait for its *next* datum — hours, for some — even
+    # though the self-healing behaviour the gate depends on shouldn't wait on
+    # a signal that may not arrive again today. `_handle` is idempotent
+    # against anything already handled live, since it only writes when the
+    # evidence actually changes.
+    for name, sample in coordinator.all_samples():
+        _handle(name, sample)
+    return unsub
 
 
 async def _async_options_updated(
@@ -185,8 +267,17 @@ async def _async_options_updated(
     if not record:
         return
     coordinator: TeslaTelemetryCoordinator = record["coordinator"]
-    new_intervals = resolve_effective_intervals(entry)
-    coordinator.effective_intervals = new_intervals
+
+    from .services import (
+        _build_telemetry_config,
+        _stamp_last_sync,
+        entry_ca_pem,
+    )
+
+    new_fields = _config_fields(entry)
+    coordinator.effective_intervals, coordinator.resend_intervals = (
+        _effective_and_resend_intervals(new_fields)
+    )
 
     # Skip a redundant push when the effective config is unchanged — e.g. only
     # the cost rate was edited, or this fired from our own last_sync stamp
@@ -198,7 +289,7 @@ async def _async_options_updated(
     # already held it — so after an update that changed the default signal set
     # the two always matched and the new signals were never pushed.
     if entry.data.get(CONF_LAST_SYNC_FIELDS_HASH) == _fields_fingerprint(
-        new_intervals
+        new_fields
     ):
         return
 
@@ -212,8 +303,6 @@ async def _async_options_updated(
     if api is None:
         return
 
-    from .services import _build_telemetry_config, _stamp_last_sync, entry_ca_pem
-
     # entry_ca_pem honours a stored ca_pem override; using the default
     # bundle here would quietly undo a private CA on the next options edit.
     cfg = _build_telemetry_config(entry, entry_ca_pem(entry))
@@ -226,7 +315,7 @@ async def _async_options_updated(
             err,
         )
         return
-    _stamp_last_sync(hass, entry, new_intervals)
+    _stamp_last_sync(hass, entry, new_fields)
     _LOGGER.info(
         "tesla_telemetry: options change re-pushed telemetry config for "
         "vin=%s — %s",

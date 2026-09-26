@@ -225,6 +225,128 @@ Assistant `config/custom_components/` directory and restart.)
    the telemetry vhost — a `Hermes/...` user agent connecting is the sign the
    car has picked up the configuration. Entities begin updating shortly after.
 
+### Telemetry options
+
+Once the integration is running, **Settings → Devices & Services → Tesla
+Fleet Telemetry → Configure** opens a menu rather than one long form — with
+251 selectable signals and four settings per signal, a single form would be
+unusable. The menu has five entries:
+
+* **Preset** — apply one of five interval presets (below) in one step.
+* **Browse a category** — one interval field per signal, grouped the way
+  Tesla documents its categories (Charging, Climate, Powertrain, …). This is
+  the bulk-editing view.
+* **Find a signal** — search the full Tesla catalog and tune one signal in
+  detail: its interval, minimum delta, resend interval, and included fields.
+* **Cost and advanced** — the cost-per-million-signals rate, the
+  `assume_firmware_support` override, and the projected cost of your current
+  selection.
+* **Save and close** — writes everything you changed and re-pushes the
+  telemetry configuration to the vehicle in one go.
+
+Nothing is written to the config entry until you choose **Save and close**;
+navigating the menu and backing out at any point leaves the stored
+configuration untouched.
+
+#### Presets
+
+A preset retunes the interval of signals that are already enabled; it never
+turns a new signal on. Choosing `eco` will not add Charging signals you never
+enabled — it only slows down the ones you already have.
+
+| Category | eco | balanced | live |
+| --- | ---: | ---: | ---: |
+| Location | 300 | 30 | 1 |
+| Driving | 300 | 30 | 1 |
+| Charging | 600 | 60 | 10 |
+| Powertrain | 600 | 60 | 5 |
+| Safety | 300 | 60 | 10 |
+| Climate | 900 | 120 | 30 |
+| Vehicle State | 900 | 120 | 30 |
+| Media | 1800 | 300 | 60 |
+| Service | 3600 | 900 | 300 |
+| Vehicle Configuration | 3600 | 3600 | 3600 |
+| User Preference | 3600 | 3600 | 3600 |
+| (uncategorised) | 900 | 120 | 60 |
+
+Seconds. `default` leaves every signal at its built-in interval, and
+`high_rate` is the older, narrower preset kept for backward compatibility
+with automations that already call `tesla_telemetry.set_interval_preset`: it
+only pins `Location` and `VehicleSpeed` to 1 second and leaves everything
+else alone.
+
+**Behaviour change on upgrade:** previously, the interval preset was applied
+last and unconditionally, so `high_rate` force-enabled `Location` and
+`VehicleSpeed` and overrode any per-signal setting you had made on them. A
+preset is now a lower layer than a per-signal override, so any explicit
+override on those two signals wins instead. This only affects you if you use
+`high_rate` and also set an explicit override on `Location` or `VehicleSpeed`.
+
+`interval_seconds` is a ceiling, not a poll rate — Tesla pushes a signal the
+moment it changes and never more often than the configured interval. That is
+why a short interval on a signal that rarely changes (most of the
+`Vehicle Configuration` and `User Preference` categories, for instance) costs
+almost nothing: the ceiling only binds when the value is actually moving that
+fast. The one preset combination worth knowing about is `ChargerVoltage`
+under `live`: Tesla documents it as changing frequently even while the car is
+not charging, so a 10-second ceiling on it is the one case where `live` can
+generate real, continuous traffic rather than a burst around an event.
+
+#### Minimum delta, resend interval, and included fields
+
+The **Find a signal** step exposes three settings beyond the interval, each
+gated to a firmware version because Tesla only documents them from that
+release onward:
+
+* **Minimum delta** (firmware `2024.44.32` or later) — suppress an update
+  unless the value has moved by at least this much, on top of the interval
+  ceiling.
+* **Resend interval** (firmware `2024.44.32` or later) — resend the signal's
+  current value even when it hasn't changed, at most every *N* seconds.
+* **Included fields** (firmware `2026.26.6` or later) — bundle other
+  signals' latest values into this signal's own payload.
+
+A value you type into one of these fields is **stored** as soon as you save,
+whether or not your car has shown it supports the required firmware. If the
+car hasn't proven support yet, the value is withheld from what is actually
+pushed to the vehicle — the form says so under the field — and it starts
+being pushed automatically, with no further action from you, the moment the
+integration sees proof (it watches every signal your car sends for firmware
+evidence). It is never rejected outright, and it never takes effect
+immediately on an unproven car. If you already know your car's firmware and
+don't want to wait for that proof, the **Cost and advanced** step has an
+`assume_firmware_support` toggle that sends these keys regardless.
+
+#### Cost
+
+The **Cost and advanced** step shows two numbers for your current selection:
+a monthly ceiling (every enabled signal changing as often as its interval
+allows) and, for signals where you've set a resend interval, a monthly floor
+(the traffic those resends guarantee no matter how the car is used). Both are
+genuine *bounds* on the pushed configuration, not estimates of real usage —
+actual traffic for a parked, idle car is normally far below the ceiling.
+
+Two sensors report what has actually happened, rather than what's
+configured. **Estimated signal cost** is the lifetime total, converted from
+the running signal counter at your configured rate. **Projected monthly
+signal cost** is a live measurement instead: the observed signal rate since
+the last Home Assistant restart, scaled to a month. It reads `unknown` for
+the first five minutes after a restart, because a rate measured over a
+shorter window is noise rather than a usable projection.
+
+#### A staleness limitation worth knowing
+
+Because Tesla only sends a signal when it changes (or on the interval
+ceiling, whichever comes first), an entity with no resend interval configured
+can read `unavailable` simply because the underlying value hasn't changed
+recently — not because the car has gone offline. If you need to reliably
+tell "hasn't changed" apart from "stopped reporting" for a particular signal,
+set a resend interval on it from the **Find a signal** step: staleness is
+then judged against that commitment to send, which is the sound basis,
+instead of the interval ceiling. Signals with no resend interval keep
+today's behaviour, which is also the only indication most users currently
+have that a car has gone offline at all.
+
 ## Multiple vehicles
 
 Add the integration again for each additional VIN. The endpoint settings
@@ -242,7 +364,7 @@ its own Home Assistant device with its own entities. Service calls take an
 | `tesla_telemetry.get_telemetry_config` | Fetch Tesla's current config for the VIN — check `synced` and `key_paired`. |
 | `tesla_telemetry.get_telemetry_errors` | Fetch the errors vehicles reported after receiving the config — the fastest way to find out why a car accepted the config but never connected. |
 | `tesla_telemetry.dump_public_key` | Emit the partner public key PEM, ready to host at `.well-known`. |
-| `tesla_telemetry.set_interval_preset` | Switch streaming intervals between `default` and `high_rate` (~1 s location/speed). |
+| `tesla_telemetry.set_interval_preset` | Switch to one of the five interval presets (`default`, `eco`, `balanced`, `live`, `high_rate`) — see [Telemetry options](#telemetry-options). |
 
 The telemetry configuration expires on Tesla's side after roughly 30 days. The
 integration checks daily and re-pushes automatically when the last sync is

@@ -50,9 +50,10 @@ from .const import (
     CONF_PRIVATE_KEY_PEM,
     CONF_VIN,
     DOMAIN,
-    INTERVAL_PRESET_OVERRIDES,
 )
-from .signals import resolve_effective_intervals
+from .firmware import evidence_from_entry
+from .presets import PRESETS
+from .signals import FieldPolicy, resolve_field_policies
 from .tesla_api import (
     TelemetryConfig,
     TelemetryFieldConfig,
@@ -107,7 +108,13 @@ _GET_ERRORS_SCHEMA = vol.Schema(
 _SET_PRESET_SCHEMA = vol.Schema(
     {
         vol.Optional(ATTR_ENTRY_ID): str,
-        vol.Required(ATTR_PRESET): vol.In(list(INTERVAL_PRESET_OVERRIDES)),
+        # Validated against the full preset catalog (`presets.PRESETS`), not
+        # the legacy `INTERVAL_PRESET_OVERRIDES` table, which only ever held
+        # `default` and `high_rate`. Validating against that narrower table
+        # let the options UI offer `eco`/`balanced`/`live` while the service
+        # rejected them — two stores disagreeing about one setting, which is
+        # exactly the bug this phase's preset work exists to remove.
+        vol.Required(ATTR_PRESET): vol.In(list(PRESETS)),
         vol.Optional(ATTR_CA_PEM): str,
     }
 )
@@ -141,15 +148,68 @@ def _entry_api(hass: HomeAssistant, entry: ConfigEntry) -> TeslaApi:
     return record["api"]
 
 
-def _resolve_intervals(entry: ConfigEntry) -> dict[str, int]:
-    """The ``{signal: interval}`` map to push to Tesla for this entry.
+def _resolve_policies(entry: ConfigEntry) -> dict[str, FieldPolicy]:
+    """The resolved per-field policy for this entry, firmware gate included."""
+    return resolve_field_policies(entry, evidence_from_entry(entry))
 
-    Delegates to :func:`signals.resolve_effective_intervals`, which layers the
-    built-in defaults, the user's per-signal options-flow overrides, and the
-    active interval preset. Kept as a thin wrapper so the service handlers and
-    ``_build_telemetry_config`` have a stable local name.
+
+def _policy_field_configs(entry: ConfigEntry) -> dict[str, TelemetryFieldConfig]:
+    """The resolved policies as ``TelemetryFieldConfig`` objects.
+
+    Single source of truth for turning a resolved policy into the object
+    Tesla's config body is built from — ``_build_telemetry_config`` and
+    ``_config_fields`` both call this rather than each rebuilding
+    ``TelemetryFieldConfig`` from ``_resolve_policies`` themselves, so the
+    pushed config and the thing that gets fingerprinted cannot drift apart.
     """
-    return resolve_effective_intervals(entry)
+    return {
+        name: TelemetryFieldConfig(
+            interval_seconds=policy.interval_seconds,
+            minimum_delta=policy.minimum_delta,
+            resend_interval_seconds=policy.resend_interval_seconds,
+            include_fields=list(policy.include_fields),
+        )
+        for name, policy in _resolve_policies(entry).items()
+    }
+
+
+def _config_fields(entry: ConfigEntry) -> dict[str, dict[str, Any]]:
+    """The serialised ``fields`` object, and the thing that is fingerprinted.
+
+    Fingerprinting the serialised body rather than the intervals is what makes
+    an edit to a minimum delta detectable: the comparison has to cover
+    everything that is actually sent, or the options listener decides nothing
+    changed and never re-pushes.
+    """
+    return {
+        name: config.to_dict()
+        for name, config in _policy_field_configs(entry).items()
+    }
+
+
+def _effective_and_resend_intervals(
+    fields: Mapping[str, dict[str, Any]],
+) -> tuple[dict[str, int], dict[str, int]]:
+    """The coordinator's staleness inputs, from the same gated fields the
+    vehicle is actually configured with (a `_config_fields(entry)` result).
+
+    Both `__init__.async_setup_entry` and `_async_options_updated` call this
+    on their own `_config_fields(entry)` rather than each deriving the two
+    maps themselves, so a signal whose required `minimum_delta` was gated
+    away by the firmware check — and is therefore absent from what is
+    actually pushed — is judged the same way at startup as it is after the
+    next options save. Two copies of this derivation could drift; one shared
+    one cannot.
+    """
+    effective_intervals = {
+        name: body["interval_seconds"] for name, body in fields.items()
+    }
+    resend_intervals = {
+        name: body["resend_interval_seconds"]
+        for name, body in fields.items()
+        if "resend_interval_seconds" in body
+    }
+    return effective_intervals, resend_intervals
 
 
 def _resolve_ca_pem(
@@ -194,33 +254,52 @@ def _build_telemetry_config(entry: ConfigEntry, ca_pem: str) -> TelemetryConfig:
         hostname=entry.data[CONF_HOSTNAME],
         port=int(entry.data[CONF_PORT]),
         ca=ca_pem,
-        fields={
-            name: TelemetryFieldConfig(interval_seconds=interval)
-            for name, interval in _resolve_intervals(entry).items()
-        },
+        fields=_policy_field_configs(entry),
     )
 
 
-def _fields_fingerprint(intervals: Mapping[str, int]) -> str:
+def _fields_fingerprint(
+    fields: Mapping[str, int | Mapping[str, Any]],
+) -> str:
     """Stable digest of a resolved field config.
 
-    Stored rather than the whole 80-entry mapping: all anyone needs is an
-    equality test against what the car was last told, and a digest keeps the
-    config entry small.
+    Stored rather than the whole mapping: all anyone needs is an equality test
+    against what the car was last told, and a digest keeps the config entry
+    small.
+
+    Accepts either a plain ``{signal: interval}`` mapping or the serialised
+    per-field bodies. A serialised body containing only ``interval_seconds``
+    is collapsed back to a bare int, so it digests identically to the plain
+    shape — which is what keeps an entry stamped before Phase 4 from looking
+    changed the first time it is compared, and what makes a default
+    configuration's digest match regardless of which shape produced it.
 
     Serialised as JSON rather than joined with separators, so that no field
     name can be confused with the delimiters and produce a collision. Tesla's
     Field enum never contains one today, but a digest that silently treats two
     different configs as equal would present as "the car was never updated".
     """
-    payload = json.dumps(sorted(intervals.items()), separators=(",", ":"))
+    normalised: dict[str, Any] = {}
+    for name, value in fields.items():
+        if isinstance(value, int):
+            normalised[name] = value
+            continue
+        body = dict(value)
+        normalised[name] = (
+            body["interval_seconds"]
+            if set(body) == {"interval_seconds"}
+            else body
+        )
+    payload = json.dumps(
+        sorted(normalised.items()), separators=(",", ":"), sort_keys=True
+    )
     return hashlib.sha256(payload.encode()).hexdigest()
 
 
 def _stamp_last_sync(
     hass: HomeAssistant,
     entry: ConfigEntry,
-    intervals: Mapping[str, int] | None = None,
+    fields: Mapping[str, int | Mapping[str, Any]] | None = None,
 ) -> None:
     """Record a successful telemetry config push: when, and what.
 
@@ -230,8 +309,8 @@ def _stamp_last_sync(
     next resync tick pushes instead of waiting for the age to expire.
     """
     new_data = {**entry.data, CONF_LAST_SYNC_AT: int(time.time())}
-    if intervals is not None:
-        new_data[CONF_LAST_SYNC_FIELDS_HASH] = _fields_fingerprint(intervals)
+    if fields is not None:
+        new_data[CONF_LAST_SYNC_FIELDS_HASH] = _fields_fingerprint(fields)
     hass.config_entries.async_update_entry(entry, data=new_data)
 
 
@@ -263,7 +342,7 @@ async def _bootstrap_handler(call: ServiceCall) -> ServiceResponse:
     response["telemetry_config"] = await api.set_fleet_telemetry_config(
         entry.data[CONF_VIN], cfg
     )
-    _stamp_last_sync(hass, entry, _resolve_intervals(entry))
+    _stamp_last_sync(hass, entry, _config_fields(entry))
     _LOGGER.info(
         "tesla_telemetry: bootstrap completed for vin=%s — %s",
         entry.data[CONF_VIN],
@@ -279,7 +358,7 @@ async def _resync_handler(call: ServiceCall) -> ServiceResponse:
     ca_pem = _resolve_ca_pem(hass, entry, call.data)
     cfg = _build_telemetry_config(entry, ca_pem)
     response = await api.set_fleet_telemetry_config(entry.data[CONF_VIN], cfg)
-    _stamp_last_sync(hass, entry, _resolve_intervals(entry))
+    _stamp_last_sync(hass, entry, _config_fields(entry))
     _LOGGER.info(
         "tesla_telemetry: resync completed for vin=%s — %s",
         entry.data[CONF_VIN],
@@ -358,16 +437,24 @@ async def _get_telemetry_errors_handler(call: ServiceCall) -> ServiceResponse:
 async def _set_interval_preset_handler(call: ServiceCall) -> ServiceResponse:
     """Switch the telemetry interval preset and re-push the config.
 
-    The preset name is persisted in entry.data so a HA restart preserves the
-    user's choice. Auto-resync also honours it.
+    The preset name is persisted in entry.options (see `signals.active_preset`)
+    so a HA restart preserves the user's choice, and so it lives in the same
+    place the options-flow preset step writes it. Auto-resync also honours it.
     """
     hass = call.hass
     entry = _resolve_entry(hass, call.data.get(ATTR_ENTRY_ID))
     api = _entry_api(hass, entry)
     preset: str = call.data[ATTR_PRESET]
 
-    new_data = {**entry.data, CONF_INTERVAL_PRESET: preset}
-    hass.config_entries.async_update_entry(entry, data=new_data)
+    # Written to options, not data. Two stores for one setting is the bug
+    # where the service appears to do nothing because `signals.active_preset`
+    # reads options first — `active_preset` still falls back to `entry.data`
+    # so an entry last written by the pre-Phase-4 service keeps its preset
+    # until something saves.
+    hass.config_entries.async_update_entry(
+        entry,
+        options={**entry.options, CONF_INTERVAL_PRESET: preset},
+    )
     # _build_telemetry_config now reads the just-saved preset.
     entry = hass.config_entries.async_get_entry(entry.entry_id)  # type: ignore[assignment]
     assert entry is not None
@@ -375,8 +462,12 @@ async def _set_interval_preset_handler(call: ServiceCall) -> ServiceResponse:
     ca_pem = _resolve_ca_pem(hass, entry, call.data)
     cfg = _build_telemetry_config(entry, ca_pem)
     response = await api.set_fleet_telemetry_config(entry.data[CONF_VIN], cfg)
-    _stamp_last_sync(hass, entry, _resolve_intervals(entry))
-    intervals = _resolve_intervals(entry)
+    fields = _config_fields(entry)
+    _stamp_last_sync(hass, entry, fields)
+    # Reported from the same gated source as everything else, not the
+    # ungated `resolve_effective_intervals` — otherwise this could
+    # under-report versus what was actually just pushed above.
+    intervals, _resend_intervals = _effective_and_resend_intervals(fields)
     _LOGGER.info(
         "tesla_telemetry: interval preset=%s applied for vin=%s — %s",
         preset,
@@ -497,13 +588,13 @@ async def _auto_resync_if_due(hass: HomeAssistant, entry: ConfigEntry) -> None:
     if not last:
         return
     age = time.time() - last
-    intervals = _resolve_intervals(entry)
+    fields = _config_fields(entry)
     stored_hash = entry.data.get(CONF_LAST_SYNC_FIELDS_HASH)
     # An entry stamped before this key existed has no fingerprint. Treat that
     # as "unknown, not stale" and let the age check drive it, rather than
     # pushing for every such entry on the next tick after an update.
     fields_changed = (
-        stored_hash is not None and stored_hash != _fields_fingerprint(intervals)
+        stored_hash is not None and stored_hash != _fields_fingerprint(fields)
     )
     if age < AUTO_RESYNC_MAX_AGE_SECONDS and not fields_changed:
         return
@@ -523,13 +614,13 @@ async def _auto_resync_if_due(hass: HomeAssistant, entry: ConfigEntry) -> None:
             err,
         )
         return
-    _stamp_last_sync(hass, entry, intervals)
+    _stamp_last_sync(hass, entry, fields)
     _LOGGER.info(
         "tesla_telemetry: auto-resync ok for vin=%s after %ds (%s, %d fields): %s",
         entry.data[CONF_VIN],
         int(age),
         "field config changed" if fields_changed else "age",
-        len(intervals),
+        len(fields),
         result,
     )
 
