@@ -74,6 +74,9 @@ class TeslaTelemetryCoordinator:
         # restores across restarts, so ``lifetime_signals`` stays monotonic.
         self.signals_since_start = 0
         self.restored_signal_base = 0
+        # When this process began counting. The measured cost projection needs
+        # a window, and `signals_since_start` alone does not carry one.
+        self.started_at = time.time()
         self.signal_counts: Counter[str] = Counter()
         # Effective per-signal intervals used for staleness. Seeded to the
         # built-in defaults and refreshed by __init__.async_setup_entry (and
