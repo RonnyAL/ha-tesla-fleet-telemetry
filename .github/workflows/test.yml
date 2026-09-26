@@ -23,6 +23,24 @@ jobs:
       - name: Run tests
         run: pytest
 
+  # There is deliberately no "oldest supported Home Assistant" job here.
+  #
+  # hacs.json claims a minimum of 2024.12.0 and that claim is measured, not
+  # assumed: the full suite was run against homeassistant 2024.12.4
+  # (pytest-homeassistant-custom-component 0.13.194, Python 3.12) and all
+  # tests pass. Re-run it the same way if you change the floor.
+  #
+  # It is not automated because pinning a year-old Home Assistant is not
+  # reproducible in practice. Three attempts, three unrelated failures:
+  # 2025.3 cannot be installed at all (it depends on an aiohttp release that
+  # was later yanked); 2025.12 dies at import because pycares has since
+  # drifted out from under the aiodns version it pins; and on 2024.12 that
+  # era's test harness fails the reauth tests' *teardown* on a daemon thread
+  # Home Assistant's own executor starts, hopping between tests so it cannot
+  # be deselected cleanly. Each would need its own transitive pin, and a
+  # growing pile of those is a job that reports its own decay rather than
+  # this integration's compatibility.
+
   signal-metadata:
     name: signal metadata is current
     runs-on: ubuntu-latest
