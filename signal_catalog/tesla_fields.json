@@ -1137,7 +1137,7 @@
   },
   {
     "category": "Safety",
-    "description": "The total number of miles driven since the Self-Driving statistics were reset. A reset may occur for certain software updates, car computer replacement, factory reset, or other triggers. This field is only available on HW4 vehicles running firmware version 2025.44.25.5 or later.",
+    "description": "The total number of miles driven since the Self-Driving (Tesla Assisted Driving in Europe) statistics were reset. A reset may occur for certain software updates, car computer replacement, factory reset, or other triggers. This field is only available on HW4 vehicles running firmware version 2025.44.25.5 or later.",
     "field_name": "MilesSinceReset",
     "proto_enum_name": "",
     "type": "real",
@@ -1513,7 +1513,7 @@
   },
   {
     "category": "Safety",
-    "description": "The total number of miles driven using Full Self-Driving since the Self-Driving statistics were reset. A reset may occur for certain software updates, car computer replacement, factory reset, or other triggers. This field requires minimum_delta to be explicitly set to a value >= 1 and is only available on HW4 vehicles running firmware version 2025.44.25.5 or later.",
+    "description": "The total number of miles driven using Full Self-Driving (Tesla Assisted Driving in Europe) since the Self-Driving (Tesla Assisted Driving in Europe) statistics were reset. A reset may occur for certain software updates, car computer replacement, factory reset, or other triggers. This field requires minimum_delta to be explicitly set to a value >= 1 and is only available on HW4 vehicles running firmware version 2025.44.25.5 or later.",
     "field_name": "SelfDrivingMilesSinceReset",
     "proto_enum_name": "",
     "type": "real",
