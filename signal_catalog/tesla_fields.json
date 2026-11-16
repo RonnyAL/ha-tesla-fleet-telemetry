@@ -16,6 +16,14 @@
     "vehicle_data_equivalent": "charge_state.charger_power"
   },
   {
+    "category": "Vehicle State",
+    "description": "On/Off accessory power state. All ECUs related to accessory power are ready/powered.",
+    "field_name": "AccessoryRail",
+    "proto_enum_name": "",
+    "type": "boolean",
+    "vehicle_data_equivalent": ""
+  },
+  {
     "category": "Climate",
     "description": "If the left front seat has auto seat climate enabled.",
     "field_name": "AutoSeatClimateLeft",
@@ -45,6 +53,14 @@
     "field_name": "AutomaticEmergencyBrakingOff",
     "proto_enum_name": "",
     "type": "boolean",
+    "vehicle_data_equivalent": ""
+  },
+  {
+    "category": "Safety",
+    "description": "The state of automatic emergency braking.",
+    "field_name": "AutomaticEmergencyBrakingState",
+    "proto_enum_name": "AutomaticEmergencyBrakingStateValue",
+    "type": "enum",
     "vehicle_data_equivalent": ""
   },
   {
@@ -105,6 +121,14 @@
   },
   {
     "category": "Charging",
+    "description": "The minimum brick state of charge, as a percent of brick capacity.",
+    "field_name": "BrickSocMinPercent",
+    "proto_enum_name": "",
+    "type": "real",
+    "vehicle_data_equivalent": ""
+  },
+  {
+    "category": "Charging",
     "description": "Brick voltage maximum.",
     "field_name": "BrickVoltageMax",
     "proto_enum_name": "",
@@ -117,6 +141,22 @@
     "field_name": "BrickVoltageMin",
     "proto_enum_name": "",
     "type": "real",
+    "vehicle_data_equivalent": ""
+  },
+  {
+    "category": "Vehicle State",
+    "description": "The keep-on state of the cabin 12V accessory port. Semi-truck only.",
+    "field_name": "Cabin12vPortKeepOn",
+    "proto_enum_name": "CabinPortKeepOnState",
+    "type": "enum",
+    "vehicle_data_equivalent": ""
+  },
+  {
+    "category": "Vehicle State",
+    "description": "The keep-on state of the cabin 48V accessory port. Semi-truck only.",
+    "field_name": "Cabin48vPortKeepOn",
+    "proto_enum_name": "CabinPortKeepOnState",
+    "type": "enum",
     "vehicle_data_equivalent": ""
   },
   {
@@ -793,6 +833,14 @@
   },
   {
     "category": "Location",
+    "description": "The GPS accuracy of the vehicle's location, measured in meters.",
+    "field_name": "GpsAccuracyMeters",
+    "proto_enum_name": "",
+    "type": "real",
+    "vehicle_data_equivalent": ""
+  },
+  {
+    "category": "Location",
     "description": "The orientation of the vehicle. 0 represents North, 90 represents East, etc.",
     "field_name": "GpsHeading",
     "proto_enum_name": "",
@@ -805,6 +853,14 @@
     "field_name": "GpsState",
     "proto_enum_name": "",
     "type": "boolean",
+    "vehicle_data_equivalent": ""
+  },
+  {
+    "category": "Driving",
+    "description": "The estimated road grade, as a percent.",
+    "field_name": "GradeEstimatePercent",
+    "proto_enum_name": "",
+    "type": "real",
     "vehicle_data_equivalent": ""
   },
   {
@@ -961,6 +1017,30 @@
   },
   {
     "category": "Charging",
+    "description": "Energy (in kWh) added to the battery packs during DC charging.",
+    "field_name": "LifetimeDcChargeEnergyKwh",
+    "proto_enum_name": "",
+    "type": "real",
+    "vehicle_data_equivalent": ""
+  },
+  {
+    "category": "Charging",
+    "description": "Energy (in kWh) added to the battery packs during charging.",
+    "field_name": "LifetimeEnergyChargedKwh",
+    "proto_enum_name": "",
+    "type": "real",
+    "vehicle_data_equivalent": ""
+  },
+  {
+    "category": "Charging",
+    "description": "Energy (in kWh) added to the battery packs from regenerative braking.",
+    "field_name": "LifetimeEnergyGainedRegen",
+    "proto_enum_name": "",
+    "type": "real",
+    "vehicle_data_equivalent": ""
+  },
+  {
+    "category": "Charging",
     "description": "Total energy-lost kWh count during discharging.",
     "field_name": "LifetimeEnergyUsed",
     "proto_enum_name": "",
@@ -1043,6 +1123,14 @@
     "category": "Driving",
     "description": "The longitudinal acceleration of the vehicle measured in m/s^2.",
     "field_name": "LongitudinalAcceleration",
+    "proto_enum_name": "",
+    "type": "real",
+    "vehicle_data_equivalent": ""
+  },
+  {
+    "category": "Location",
+    "description": "The maximum speed required to arrive at the navigation destination on time, measured in miles per hour. If no navigation destination is set, Invalid will be returned.",
+    "field_name": "MaxSpeedToReachDestinationMph",
     "proto_enum_name": "",
     "type": "real",
     "vehicle_data_equivalent": ""
@@ -1137,7 +1225,7 @@
   },
   {
     "category": "Safety",
-    "description": "The total number of miles driven since the Self-Driving statistics were reset. A reset may occur for certain software updates, car computer replacement, factory reset, or other triggers. This field is only available on HW4 vehicles running firmware version 2025.44.25.5 or later.",
+    "description": "The total number of miles driven since the Self-Driving (Tesla Assisted Driving in Europe) statistics were reset. A reset may occur for certain software updates, car computer replacement, factory reset, or other triggers. This field is only available on HW4 vehicles running firmware version 2025.44.25.5 or later.",
     "field_name": "MilesSinceReset",
     "proto_enum_name": "",
     "type": "real",
@@ -1171,6 +1259,14 @@
     "category": "Charging",
     "description": "The minimum thermistor temperature.",
     "field_name": "ModuleTempMin",
+    "proto_enum_name": "",
+    "type": "real",
+    "vehicle_data_equivalent": ""
+  },
+  {
+    "category": "Charging",
+    "description": "The nominal full pack energy of the battery, measured in kWh.",
+    "field_name": "NominalFullPackEnergyKwh",
     "proto_enum_name": "",
     "type": "real",
     "vehicle_data_equivalent": ""
@@ -1297,6 +1393,14 @@
   },
   {
     "category": "Charging",
+    "description": "The power transfer state of the battery management system.",
+    "field_name": "PowerTransferStatus",
+    "proto_enum_name": "PowerTransferStatusValue",
+    "type": "enum",
+    "vehicle_data_equivalent": ""
+  },
+  {
+    "category": "Charging",
     "description": "The number of hours remaining through Powershare.",
     "field_name": "PowershareHoursLeft",
     "proto_enum_name": "",
@@ -1384,6 +1488,14 @@
     "vehicle_data_equivalent": "vehicle_config.rear_seat_heaters"
   },
   {
+    "category": "Vehicle State",
+    "description": "If remote start is currently active.",
+    "field_name": "RemoteStartActive",
+    "proto_enum_name": "",
+    "type": "boolean",
+    "vehicle_data_equivalent": "vehicle_state.remote_start"
+  },
+  {
     "category": "Vehicle Configuration",
     "description": "If the vehicle is being driven without a physical key.",
     "field_name": "RemoteStartEnabled",
@@ -1398,6 +1510,14 @@
     "proto_enum_name": "",
     "type": "boolean",
     "vehicle_data_equivalent": "vehicle_config.rhd"
+  },
+  {
+    "category": "Driving",
+    "description": "The estimated rolling resistance coefficient.",
+    "field_name": "RollingResistanceCoefficient",
+    "proto_enum_name": "",
+    "type": "real",
+    "vehicle_data_equivalent": ""
   },
   {
     "category": "Vehicle Configuration",
@@ -1513,10 +1633,42 @@
   },
   {
     "category": "Safety",
-    "description": "The total number of miles driven using Full Self-Driving since the Self-Driving statistics were reset. A reset may occur for certain software updates, car computer replacement, factory reset, or other triggers. This field requires minimum_delta to be explicitly set to a value >= 1 and is only available on HW4 vehicles running firmware version 2025.44.25.5 or later.",
+    "description": "The total number of miles driven using Full Self-Driving (Tesla Assisted Driving in Europe) since the Self-Driving (Tesla Assisted Driving in Europe) statistics were reset. A reset may occur for certain software updates, car computer replacement, factory reset, or other triggers. This field requires minimum_delta to be explicitly set to a value >= 1 and is only available on HW4 vehicles running firmware version 2025.44.25.5 or later.",
     "field_name": "SelfDrivingMilesSinceReset",
     "proto_enum_name": "",
     "type": "real",
+    "vehicle_data_equivalent": ""
+  },
+  {
+    "category": "Vehicle State",
+    "description": "The Self-Driving software version of the vehicle.",
+    "field_name": "SelfDrivingSoftwareVersion",
+    "proto_enum_name": "",
+    "type": "string",
+    "vehicle_data_equivalent": ""
+  },
+  {
+    "category": "Driving",
+    "description": "The Semi's cruise speed limit in miles per hour.",
+    "field_name": "SemiCruiseSpeedLimitMph",
+    "proto_enum_name": "",
+    "type": "real",
+    "vehicle_data_equivalent": ""
+  },
+  {
+    "category": "Vehicle State",
+    "description": "If the Semi's trailer is latched.",
+    "field_name": "SemiTrailerLatched",
+    "proto_enum_name": "",
+    "type": "boolean",
+    "vehicle_data_equivalent": ""
+  },
+  {
+    "category": "Driving",
+    "description": "The estimated mass of the Semi in kilograms.",
+    "field_name": "SemiVehicleMassKg",
+    "proto_enum_name": "",
+    "type": "integer",
     "vehicle_data_equivalent": ""
   },
   {
@@ -1673,6 +1825,14 @@
   },
   {
     "category": "Vehicle State",
+    "description": "If a software update is available.",
+    "field_name": "SoftwareUpdateAvailable",
+    "proto_enum_name": "",
+    "type": "boolean",
+    "vehicle_data_equivalent": ""
+  },
+  {
+    "category": "Vehicle State",
     "description": "The percent of the software update that has been downloaded. Note: during the download of one software update, this value will go from 0-100% multiple times.",
     "field_name": "SoftwareUpdateDownloadPercentComplete",
     "proto_enum_name": "",
@@ -1686,6 +1846,14 @@
     "proto_enum_name": "",
     "type": "integer",
     "vehicle_data_equivalent": "vehicle_state.software_update.expected_duration_sec"
+  },
+  {
+    "category": "Vehicle State",
+    "description": "If a software update is in progress.",
+    "field_name": "SoftwareUpdateInProgress",
+    "proto_enum_name": "",
+    "type": "boolean",
+    "vehicle_data_equivalent": ""
   },
   {
     "category": "Vehicle State",
